@@ -1,0 +1,80 @@
+ALEX REVIEWIT – FERNWARTUNG (eigenes TeamViewer/AnyDesk)
+========================================================
+ZWEI PROGRAMME (wie TeamViewer QuickSupport + Vollversion / AnyDesk):
+  • SCHNELLHILFE (QuickSupport): einmal starten, zeigt einen 6-stelligen Code.
+    Keine Installation, keine Rechte. Fuer spontane Hilfe bei Kunden/Mitarbeitern.
+      Dateien:  AlexReviewit-Schnellhilfe.exe / .pkg
+  • VOLLVERSION (Host): auf eigenen Geraeten installieren. Beim ersten Start
+    einmal den Einrichtungs-Code aus dem Intranet (Fernwartung -> Geraet hinzufuegen)
+    und optional ein Zugriffs-Passwort eingeben. Danach dauerhaft erreichbar,
+    startet mit dem System mit, zeigt ID + Status.
+      Dateien:  AlexReviewit-Fernwartung.exe / .pkg
+  Bauen: siehe BAUEN-LIES-MICH.txt (GitHub-Cloud ODER BUILD-Skripte). Ohne fertige
+  Datei gehen auch die SCHNELLHILFE-*/GERAET-EINRICHTEN-*-Skripte (brauchen Python).
+
+FUNKTIONEN waehrend einer Sitzung (im Browser, wie TeamViewer/AnyDesk):
+  • Vollbild sehen + Maus/Tastatur steuern, "Nur zusehen"-Modus
+  • Strg+Alt+Entf senden, Einpassen/100 %
+  • Mehrere Bildschirme: oben umschalten
+  • Zwischenablage (Text) zum Gerät senden
+  • Dateien an das Gerät senden (Ziehen & Ablegen oder Knopf) -> landen im Ordner
+    "AlexReviewit-Empfangen" auf dem Schreibtisch des Geraets
+  • Chat mit der Person am Gerät
+ ZUGRIFF auf hinterlegte Geraete (im Intranet pro Geraet, Zahnrad):
+  • ask = Nachfrage am Geraet · password = Passwort noetig · allow = ohne Nachfrage · off
+  • Passwort setzt der Inhaber im Intranet ODER die Vollversion am Geraet selbst.
+
+Zwei Teile:
+  1) Im Intranet die Seite „Fernwartung“ (Techniker-Seite) – erreichbar über
+     Monitoring → „Fernwartung“ oder direkt /fernwartung. Nur für Personen mit
+     der Monitoring-Berechtigung „Fernsteuerung“ (remote) bzw. den Inhaber.
+  2) Dieses kleine Programm (Agent) auf dem Gerät, das gesteuert werden soll.
+
+So läuft eine SCHNELLHILFE (spontan, wie TeamViewer QuickSupport):
+  • Das Gegenüber startet „SCHNELLHILFE-Windows.cmd“ bzw. „SCHNELLHILFE-Mac.command“.
+  • Es erscheint ein 6-stelliger Code. Diesen dir vorlesen.
+  • Du gibst den Code auf der Fernwartungs-Seite ein → „Verbinden“.
+  • Am Gerät erscheint eine Anfrage mit DEINEM Namen. Erst nach „Zustimmen“
+    wird der Bildschirm übertragen. Währenddessen läuft dort ein rotes Banner,
+    das jederzeit trennen kann. Keine Installation, keine Adminrechte nötig.
+
+So richtest du ein EIGENES GERÄT dauerhaft ein (unbeaufsichtigt, wie AnyDesk):
+  • Im Intranet: Fernwartung → „Gerät hinzufügen“ → es erscheint ein
+    Einrichtungs-Code (30 Min. gültig).
+  • Auf dem Gerät „GERAET-EINRICHTEN-…“ starten und den Code eingeben.
+    Das Gerät erscheint dann in der Liste und startet künftig automatisch mit.
+  • Standard: bei jedem Zugriff fragt das Gerät trotzdem nach (sicher). Für
+    echte Server ohne Benutzer kannst du im Intranet beim Gerät (⚙) auf
+    „ohne Rückfrage“ stellen – dann genügt die Berechtigung, es erscheint aber
+    weiterhin ein sichtbares Banner und jede Sitzung wird protokolliert.
+
+SICHERHEIT / DATENSCHUTZ (bewusst so gebaut):
+  • Nichts läuft versteckt: sichtbares Fenster/Banner, klarer Prozessname.
+  • Zugriff nur nach Code+Zustimmung (Schnellhilfe) bzw. durch den Inhaber
+    hinterlegtes Gerät mit Policy.
+  • Bild und Steuerung laufen Ende-zu-Ende verschlüsselt direkt zwischen Browser
+    und Gerät (WebRTC/DTLS-SRTP). Das Intranet vermittelt nur den Aufbau.
+  • Jede Sitzung (Start, Zustimmung, Ende) steht im Protokoll auf der Seite.
+  • Zugriff auf die Seite nur mit Microsoft-Anmeldung + Berechtigung.
+
+VORAUSSETZUNGEN auf dem Gerät:
+  • Python 3 (einmalig von python.org; bei Windows „Add to PATH“ ankreuzen).
+    Die Start-Skripte installieren die restlichen Bausteine automatisch.
+  • macOS fragt beim ersten Mal nach „Bildschirmaufnahme“ und „Bedienungshilfen“
+    (Systemeinstellungen → Datenschutz & Sicherheit) – bitte erlauben.
+  • Für schwierige Netze (strenge Firewalls) kann ein TURN-Server nötig sein:
+    im Worker die Variablen TURN_URL / TURN_USER / TURN_CRED setzen
+    (z. B. Cloudflare Realtime TURN). Ohne das klappt es in den meisten Netzen
+    direkt oder über STUN.
+
+OHNE PYTHON (eine einzige .exe/.app zum Weitergeben):
+  Man kann den Agent zu einer einzelnen Datei bündeln (dann braucht das
+  Gegenüber gar nichts zu installieren):
+    pip install pyinstaller
+    Windows:  pyinstaller --onefile --noconsole --name "AlexReviewit-Fernwartung" agent.py
+    macOS:    pyinstaller --onefile --windowed --name "AlexReviewit-Fernwartung" agent.py
+  Das muss jeweils auf einem echten Windows- bzw. Mac-Rechner gebaut werden.
+  (Die gebaute Datei dann statt der .cmd/.command weitergeben.)
+
+Adresse des Intranets ist fest hinterlegt (intranet.alexreviewit.at). Für Tests
+kann sie über die Umgebungsvariable IR_REMOTE_URL geändert werden.

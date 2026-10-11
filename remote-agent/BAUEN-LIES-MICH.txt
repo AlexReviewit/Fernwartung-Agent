@@ -1,0 +1,42 @@
+FERNWARTUNG – FERTIGE PROGRAMME (.exe / .pkg) BAUEN
+===================================================
+Es gibt drei Wege. Die fertigen Dateien sind EINE Datei zum Weitergeben
+(keine Python-Installation beim Gegenueber noetig).
+
+WEG A – In der GitHub-Cloud bauen (kein eigener Windows/Mac noetig) EMPFOHLEN
+  1. Den Ordner dieses Projekts in ein GitHub-Repository legen (die Datei
+     .github/workflows/build-fernwartung.yml ist schon dabei).
+  2. Auf GitHub: Reiter "Actions" -> "Build Fernwartung" -> "Run workflow".
+  3. Nach ein paar Minuten unter dem Lauf bei "Artifacts" herunterladen:
+       - Windows  -> AlexReviewit-Schnellhilfe.exe  UND  AlexReviewit-Fernwartung.exe
+       - macOS    -> AlexReviewit-Schnellhilfe.pkg  UND  AlexReviewit-Fernwartung.pkg
+     (Schnellhilfe = QuickSupport, Fernwartung = Vollversion/Host)
+     Mit einem Git-Tag "fernwartung-v1" legt der Lauf zusaetzlich ein Release
+     mit allen vier Dateien an (feste Download-Links).
+
+WEG B – Auf einem Windows-PC (fuer die .exe)
+  Doppelklick auf  BUILD-Windows.cmd
+  Ergebnis:  fertig\AlexReviewit-Schnellhilfe.exe
+
+WEG C – Auf einem Mac (fuer .app und .pkg)
+  Doppelklick auf  BUILD-Mac.command
+  Ergebnis:  fertig/AlexReviewit-Fernwartung.app  und  .pkg
+
+BENUTZUNG der fertigen Dateien
+  • Schnellhilfe (fuer Kunden/Mitarbeiter): die .exe bzw. .pkg/.app weitergeben.
+    Doppelklick -> zeigt den 6-stelligen Code. Keine Installation/Adminrechte.
+  • Eigenes Geraet dauerhaft hinterlegen (unbeaufsichtigt):
+      Windows:  AlexReviewit-Schnellhilfe.exe --enroll   (dann Code eingeben)
+                danach Autostart:  AlexReviewit-Schnellhilfe.exe --service
+      macOS:    "AlexReviewit-Fernwartung.app/Contents/MacOS/AlexReviewit-Fernwartung" --enroll
+    (Die Skripte GERAET-EINRICHTEN-* richten das inkl. Autostart automatisch ein,
+     funktionieren mit Python ODER mit der gebauten Datei.)
+
+SIGNATUR / WARNUNGEN
+  • Windows SmartScreen zeigt bei unsignierten .exe "Unbekannter Herausgeber".
+    Beheben mit einem Code-Signing-Zertifikat (kostenpflichtig) – optional.
+  • macOS Gatekeeper blockiert unsignierte Apps. Behelf: Rechtsklick -> Oeffnen,
+    oder  xattr -dr com.apple.quarantine <App>.  Sauber: Apple Developer ID,
+    CODESIGN_ID vor BUILD-Mac.command setzen und mit  xcrun notarytool  notarisieren.
+
+GROESSE: ~70–150 MB pro Datei (Python + WebRTC/FFmpeg sind mit eingepackt).

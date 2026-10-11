@@ -1,0 +1,45 @@
+# Baut Schnellhilfe + Vollversion fuer Windows und macOS in der GitHub-Cloud.
+# Start: Reiter "Actions" -> "Build Fernwartung" -> "Run workflow".
+# Ergebnisse: unter dem Lauf bei "Artifacts".  Tag "fernwartung-v1" => zusaetzlich ein Release mit allen Dateien.
+name: Build Fernwartung
+on:
+  workflow_dispatch:
+  push:
+    tags: ['fernwartung-v*']
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults: { run: { working-directory: remote-agent } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r requirements.txt pyinstaller
+      - run: pyinstaller --noconfirm --clean --onefile --noconsole --version-file version.txt --add-data "assets;assets" --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-submodules pynput --icon assets/icon.ico --name "AlexReviewit-Schnellhilfe" schnellhilfe.py
+      - run: pyinstaller --noconfirm --clean --onefile --noconsole --version-file version.txt --add-data "assets;assets" --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-submodules pynput --icon assets/icon.ico --name "AlexReviewit-Fernwartung" vollversion.py
+      - uses: actions/upload-artifact@v4
+        with: { name: Windows, path: 'remote-agent/dist/*.exe' }
+  macos:
+    runs-on: macos-latest
+    defaults: { run: { working-directory: remote-agent } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r requirements.txt pyinstaller
+      - run: pyinstaller --noconfirm --clean --windowed --icon assets/icon.icns --add-data "assets:assets" --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-submodules pynput --osx-bundle-identifier at.alexreviewit.fernwartung.quick --name "AlexReviewit-Schnellhilfe" schnellhilfe.py
+      - run: pyinstaller --noconfirm --clean --windowed --icon assets/icon.icns --add-data "assets:assets" --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-submodules pynput --osx-bundle-identifier at.alexreviewit.fernwartung --name "AlexReviewit-Fernwartung" vollversion.py
+      - run: |
+          pkgbuild --install-location /Applications --component "dist/AlexReviewit-Schnellhilfe.app" "dist/AlexReviewit-Schnellhilfe.pkg"
+          pkgbuild --install-location /Applications --component "dist/AlexReviewit-Fernwartung.app" "dist/AlexReviewit-Fernwartung.pkg"
+      - uses: actions/upload-artifact@v4
+        with: { name: macOS, path: 'remote-agent/dist/*.pkg' }
+  release:
+    needs: [windows, macos]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out }
+      - uses: softprops/action-gh-release@v2
+        with: { files: 'out/**/*' }

@@ -1,0 +1,841 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Alex Reviewit – Fernwartung (Agent)
+===================================
+Eigenes Fernwartungs-Programm im Stil von TeamViewer / AnyDesk.
+
+Modi:
+  (ohne Argument)   Schnellhilfe: zeigt einen 6-stelligen Sitzungscode an.
+  --enroll          Gerät einmalig dauerhaft einrichten (mit Code aus dem Intranet).
+  --service         hinterlegtes Gerät laufen lassen (unbeaufsichtigt).
+
+Es verbindet sich NIE von selbst. Bild/Steuerung starten erst nach
+ausdrücklicher Zustimmung am Gerät (Schnellhilfe) bzw. nach der vom Inhaber
+gesetzten Regel (hinterlegtes Gerät). Während einer Sitzung ist immer ein
+sichtbares rotes Banner aktiv, das jederzeit trennen kann. Die Verbindung
+(Bild + Steuerung) läuft Ende-zu-Ende verschlüsselt (WebRTC/DTLS-SRTP) direkt
+zum Browser des Technikers; das Intranet vermittelt nur den Aufbau.
+
+Abhängigkeiten (werden im fertigen .exe/.app mitgeliefert):
+  aiortc av mss pynput aiohttp numpy   (+ tkinter, bei Python dabei)
+"""
+
+import argparse
+import asyncio
+import json
+import os
+import platform
+import socket
+import sys
+import threading
+import time
+
+IS_WIN = platform.system() == "Windows"
+IS_MAC = platform.system() == "Darwin"
+FROZEN = getattr(sys, "frozen", False)
+
+# Hohe DPI unter Windows: sorgt dafür, dass die Mausposition exakt stimmt
+if IS_WIN:
+    try:
+        import ctypes
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)   # PER_MONITOR_AWARE
+        except Exception:
+            ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+BASE_URL = os.environ.get("IR_REMOTE_URL", "https://intranet.alexreviewit.at").rstrip("/")
+AGENT_EP = BASE_URL + "/api/remote/agent"
+APP_NAME = "Alex Reviewit Fernwartung"
+BRAND = "Alex Reviewit"
+FPS = int(os.environ.get("IR_REMOTE_FPS", "12"))
+POLL_SECS = 2.0
+
+
+def resource_path(rel):
+    """Pfad zu beigelegten Dateien – funktioniert auch im gebündelten .exe/.app."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, rel)
+
+
+# ---------------------------------------------------------------------------
+# Konfiguration für hinterlegte Geräte
+# ---------------------------------------------------------------------------
+def config_dir():
+    if IS_WIN:
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+    elif IS_MAC:
+        base = os.path.expanduser("~/Library/Application Support")
+    else:
+        base = os.path.expanduser("~/.config")
+    d = os.path.join(base, "AlexReviewitFernwartung")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+CONFIG_FILE = os.path.join(config_dir(), "device.json")
+
+
+def load_config():
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_config(cfg):
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f)
+
+
+def device_label():
+    try:
+        return socket.gethostname()
+    except Exception:
+        return "Gerät"
+
+
+def os_label():
+    name = {"Windows": "Windows", "Darwin": "macOS", "Linux": "Linux"}.get(platform.system(), platform.system())
+    return (name + " " + platform.release())[:40]
+
+
+# ---------------------------------------------------------------------------
+# HTTP-Signaling (nur Verbindungsaufbau; keine Bilddaten)
+# ---------------------------------------------------------------------------
+import aiohttp  # noqa: E402
+
+
+class Signal:
+    def __init__(self, session):
+        self.s = session
+
+    async def call(self, payload):
+        async with self.s.post(AGENT_EP, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as r:
+            try:
+                data = await r.json()
+            except Exception:
+                data = {"error": "ungültige Antwort (%s)" % r.status}
+            if r.status >= 400:
+                raise RuntimeError(data.get("error", "Fehler %s" % r.status))
+            return data
+
+
+# ---------------------------------------------------------------------------
+# Bildschirm als WebRTC-Video
+# ---------------------------------------------------------------------------
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer  # noqa: E402
+from aiortc.mediastreams import VideoStreamTrack  # noqa: E402
+import av  # noqa: E402
+import mss  # noqa: E402
+import numpy as np  # noqa: E402
+
+
+class ScreenTrack(VideoStreamTrack):
+    """Erfasst fortlaufend den primären Bildschirm und liefert ihn als Videostrom."""
+
+    def __init__(self, monitor_index=1):
+        super().__init__()
+        self._sct = mss.mss()
+        # Liste echter Bildschirme (monitors[0] ist der Gesamtbereich -> weglassen)
+        self.monitors = self._sct.monitors[1:] or [self._sct.monitors[0]]
+        self.index = min(max(0, monitor_index - 1), len(self.monitors) - 1)
+        self.monitor = self.monitors[self.index]
+        self.width = self.monitor["width"]
+        self.height = self.monitor["height"]
+        self._interval = 1.0 / max(5, FPS)
+        self._last = 0.0
+        self.black_frames = 0   # für macOS-Berechtigungs-Hinweis
+
+    def monitor_list(self):
+        primary = None
+        try:
+            primary = self._sct.monitors[0]
+        except Exception:
+            pass
+        out = []
+        for m in self.monitors:
+            out.append({"w": m["width"], "h": m["height"],
+                        "primary": bool(primary and m.get("left", 0) == 0 and m.get("top", 0) == 0)})
+        return out
+
+    def set_monitor(self, i):
+        if 0 <= i < len(self.monitors):
+            self.index = i
+            self.monitor = self.monitors[i]
+            self.width = self.monitor["width"]
+            self.height = self.monitor["height"]
+
+    async def recv(self):
+        pts, time_base = await self.next_timestamp()
+        wait = self._interval - (time.time() - self._last)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        self._last = time.time()
+        img = self._sct.grab(self.monitor)
+        frame = np.frombuffer(img.rgb, dtype=np.uint8).reshape(img.height, img.width, 3)
+        if IS_MAC:
+            # ohne Bildschirmaufnahme-Recht liefert macOS nur schwarze/leere Bilder
+            if int(frame[:: max(1, img.height // 8), :: max(1, img.width // 8)].max()) < 6:
+                self.black_frames += 1
+        vf = av.VideoFrame.from_ndarray(frame, format="rgb24")
+        vf.pts = pts
+        vf.time_base = time_base
+        return vf
+
+
+# ---------------------------------------------------------------------------
+# Maus & Tastatur
+# ---------------------------------------------------------------------------
+from pynput import mouse as pmouse, keyboard as pkeyboard  # noqa: E402
+
+_mouse = pmouse.Controller()
+_kbd = pkeyboard.Controller()
+_BTN = {0: pmouse.Button.left, 1: pmouse.Button.middle, 2: pmouse.Button.right}
+_SPECIAL = {
+    "Enter": pkeyboard.Key.enter, "Backspace": pkeyboard.Key.backspace, "Tab": pkeyboard.Key.tab,
+    "Escape": pkeyboard.Key.esc, " ": pkeyboard.Key.space, "Delete": pkeyboard.Key.delete,
+    "ArrowUp": pkeyboard.Key.up, "ArrowDown": pkeyboard.Key.down, "ArrowLeft": pkeyboard.Key.left,
+    "ArrowRight": pkeyboard.Key.right, "Home": pkeyboard.Key.home, "End": pkeyboard.Key.end,
+    "PageUp": pkeyboard.Key.page_up, "PageDown": pkeyboard.Key.page_down, "Insert": pkeyboard.Key.insert,
+    "CapsLock": pkeyboard.Key.caps_lock, "Control": pkeyboard.Key.ctrl, "Alt": pkeyboard.Key.alt,
+    "Shift": pkeyboard.Key.shift, "Meta": pkeyboard.Key.cmd, "OS": pkeyboard.Key.cmd,
+}
+for _i in range(1, 13):
+    _SPECIAL["F%d" % _i] = getattr(pkeyboard.Key, "f%d" % _i)
+
+
+def _to_key(name):
+    if not name:
+        return None
+    if name in _SPECIAL:
+        return _SPECIAL[name]
+    if len(name) == 1:
+        return name
+    return None
+
+
+class InputHandler:
+    def __init__(self, track):
+        self.track = track
+
+    def _xy(self, m):
+        x = int(max(0.0, min(1.0, m.get("x", 0))) * self.track.width) + self.track.monitor.get("left", 0)
+        y = int(max(0.0, min(1.0, m.get("y", 0))) * self.track.height) + self.track.monitor.get("top", 0)
+        return x, y
+
+    def handle(self, m):
+        t = m.get("t")
+        try:
+            if t == "m":
+                _mouse.position = self._xy(m)
+            elif t == "d":
+                _mouse.position = self._xy(m); _mouse.press(_BTN.get(m.get("b", 0), pmouse.Button.left))
+            elif t == "u":
+                _mouse.position = self._xy(m); _mouse.release(_BTN.get(m.get("b", 0), pmouse.Button.left))
+            elif t == "w":
+                dx = -1 if m.get("dx", 0) > 0 else (1 if m.get("dx", 0) < 0 else 0)
+                dy = -1 if m.get("dy", 0) > 0 else (1 if m.get("dy", 0) < 0 else 0)
+                _mouse.scroll(dx, dy)
+            elif t == "k":
+                k = _to_key(m.get("k"))
+                if k is None:
+                    return
+                _kbd.press(k) if m.get("down") else _kbd.release(k)
+            elif t == "txt":
+                _kbd.type(str(m.get("s", ""))[:500])
+            elif t == "combo" and m.get("name") == "cad":
+                for key in (pkeyboard.Key.ctrl, pkeyboard.Key.alt, pkeyboard.Key.delete):
+                    _kbd.press(key)
+                for key in (pkeyboard.Key.delete, pkeyboard.Key.alt, pkeyboard.Key.ctrl):
+                    _kbd.release(key)
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Oberfläche (tkinter) – im Stil der beiden Vorbilder: klares Hauptfenster,
+# großer Code, Status; Zustimmungsdialog; dauerhaftes Sitzungs-Banner.
+# ---------------------------------------------------------------------------
+import tkinter as tk  # noqa: E402
+from tkinter import font as tkfont  # noqa: E402
+
+BG = "#141829"; CARD = "#1C2135"; FG = "#F3F6FB"; ACC = "#7C8CFF"; ACC2 = "#5DADFF"
+OK = "#34D399"; RED = "#E0485F"; MUT = "#8A93A6"
+
+
+def _set_icon(win):
+    try:
+        if IS_WIN:
+            win.iconbitmap(resource_path(os.path.join("assets", "icon.ico")))
+        else:
+            win._icon_img = tk.PhotoImage(file=resource_path(os.path.join("assets", "icon-128.png")))
+            win.iconphoto(True, win._icon_img)
+    except Exception:
+        pass
+
+
+class UI:
+    def __init__(self, mode):
+        self.mode = mode
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.root.title(APP_NAME)
+        _set_icon(self.root)
+        self.main = None
+        self.banner = None
+        self.code_lbl = None
+        self.status_lbl = None
+        self.status_dot = None
+
+    # ---- Hauptfenster (Schnellhilfe) ----
+    def show_main(self, on_close):
+        if self.main and self.main.winfo_exists():
+            return
+        w = self.main = tk.Toplevel(self.root)
+        w.title(APP_NAME); w.configure(bg=BG); w.resizable(False, False)
+        _set_icon(w)
+        w.protocol("WM_DELETE_WINDOW", on_close)
+        pad = tk.Frame(w, bg=BG); pad.pack(padx=0, pady=0)
+        # Kopf
+        head = tk.Frame(pad, bg=BG); head.pack(fill="x", padx=34, pady=(26, 2))
+        tk.Label(head, text="🖥  " + BRAND, bg=BG, fg=ACC2, font=tkfont.Font(size=13, weight="bold")).pack(side="left")
+        tk.Label(pad, text="Fernwartung – Schnellhilfe", bg=BG, fg=FG,
+                 font=tkfont.Font(size=18, weight="bold")).pack(padx=34, pady=(6, 2))
+        tk.Label(pad, text="Nenne diesen Code der Person, die dir hilft.", bg=BG, fg=MUT,
+                 font=tkfont.Font(size=11)).pack(padx=34, pady=(0, 14))
+        # Code-Karte
+        card = tk.Frame(pad, bg=CARD, highlightbackground="#2C3350", highlightthickness=1)
+        card.pack(padx=34, pady=(0, 14), ipadx=18, ipady=14)
+        tk.Label(card, text="SITZUNGSCODE", bg=CARD, fg=MUT, font=tkfont.Font(size=9, weight="bold")).pack(pady=(4, 2))
+        self.code_lbl = tk.Label(card, text="– – – – – –", bg=CARD, fg=FG, font=tkfont.Font(size=42, weight="bold"))
+        self.code_lbl.pack(padx=30, pady=(0, 2))
+        self.copy_btn = tk.Button(card, text="Code kopieren", command=self._copy_code, bg="#2A3150", fg=FG,
+                                  activebackground="#39416a", relief="flat", padx=12, pady=4,
+                                  font=tkfont.Font(size=10, weight="bold"))
+        self.copy_btn.pack(pady=(2, 6))
+        # Status
+        st = tk.Frame(pad, bg=BG); st.pack(padx=34, pady=(2, 4))
+        self.status_dot = tk.Label(st, text="●", bg=BG, fg="#F5B14C", font=tkfont.Font(size=11)); self.status_dot.pack(side="left", padx=(0, 7))
+        self.status_lbl = tk.Label(st, text="Bereit – warte auf Verbindung …", bg=BG, fg=MUT, font=tkfont.Font(size=10)); self.status_lbl.pack(side="left")
+        tk.Label(pad, text="Niemand sieht deinen Bildschirm, bevor du zustimmst.\nDieses Fenster kannst du jederzeit schließen.",
+                 bg=BG, fg=MUT, font=tkfont.Font(size=9), justify="center").pack(padx=34, pady=(10, 4))
+        tk.Label(pad, text="Ende-zu-Ende verschlüsselt · " + BASE_URL.replace("https://", ""),
+                 bg=BG, fg="#5A627B", font=tkfont.Font(size=8)).pack(pady=(0, 20))
+        self._center(w, 3)
+        w.attributes("-topmost", True); w.deiconify(); w.attributes("-topmost", False)
+
+    def _copy_code(self):
+        try:
+            code = (self.code_lbl.cget("text") or "").replace(" ", "")
+            self.root.clipboard_clear(); self.root.clipboard_append(code)
+            self.copy_btn.configure(text="Kopiert ✓")
+            self.root.after(1500, lambda: self.copy_btn.configure(text="Code kopieren"))
+        except Exception:
+            pass
+
+    def set_code(self, code):
+        if self.code_lbl:
+            self.code_lbl.configure(text=code[:3] + " " + code[3:])
+
+    def set_status(self, text, color=MUT, dot="#F5B14C"):
+        if self.status_lbl:
+            try:
+                self.status_lbl.configure(text=text, fg=color); self.status_dot.configure(fg=dot)
+            except Exception:
+                pass
+
+    # ---- Zustimmungsdialog ----
+    def ask_consent(self, who, timeout_s, result):
+        dlg = tk.Toplevel(self.root); dlg.title("Fernwartungs-Anfrage"); dlg.configure(bg=BG); dlg.resizable(False, False)
+        _set_icon(dlg); dlg.attributes("-topmost", True)
+        tk.Label(dlg, text="🔒  Fernwartungs-Anfrage", bg=BG, fg=FG, font=tkfont.Font(size=15, weight="bold")).pack(padx=36, pady=(26, 8))
+        tk.Label(dlg, text="%s\nmöchte deinen Bildschirm sehen und steuern." % who, bg=BG, fg=FG,
+                 font=tkfont.Font(size=12), justify="center").pack(padx=36, pady=(0, 4))
+        tk.Label(dlg, text="Nur zustimmen, wenn du diese Hilfe gerade erwartest.", bg=BG, fg=MUT,
+                 font=tkfont.Font(size=9)).pack(padx=36, pady=(0, 12))
+        countdown = tk.Label(dlg, text="", bg=BG, fg=MUT, font=tkfont.Font(size=9)); countdown.pack()
+        btns = tk.Frame(dlg, bg=BG); btns.pack(padx=36, pady=(10, 24))
+
+        def answer(ok):
+            result[0] = ok
+            try:
+                dlg.destroy()
+            except Exception:
+                pass
+
+        tk.Button(btns, text="Ablehnen", command=lambda: answer(False), bg="#2A2F45", fg=FG, activebackground="#3A4160",
+                  relief="flat", padx=20, pady=9, font=tkfont.Font(size=11, weight="bold")).pack(side="left", padx=9)
+        tk.Button(btns, text="Zustimmen", command=lambda: answer(True), bg=OK, fg="#06281C", activebackground="#57e0a6",
+                  relief="flat", padx=20, pady=9, font=tkfont.Font(size=11, weight="bold")).pack(side="left", padx=9)
+        dlg.protocol("WM_DELETE_WINDOW", lambda: answer(False))
+        self._center(dlg, 3)
+        state = {"left": int(timeout_s)}
+
+        def tick():
+            if not dlg.winfo_exists() or result[0] is not None:
+                return
+            countdown.configure(text="Automatisch abgelehnt in %d s" % state["left"])
+            state["left"] -= 1
+            answer(False) if state["left"] < 0 else dlg.after(1000, tick)
+
+        tick()
+
+    # ---- Dauerhaftes Sitzungs-Banner ----
+    def show_banner(self, who, on_disconnect):
+        b = self.banner = tk.Toplevel(self.root)
+        b.overrideredirect(True); b.configure(bg=RED); b.attributes("-topmost", True)
+        try:
+            b.attributes("-alpha", 0.96)
+        except Exception:
+            pass
+        frm = tk.Frame(b, bg=RED); frm.pack(fill="both", expand=True, padx=14, pady=7)
+        tk.Label(frm, text="●", bg=RED, fg="#FFFFFF", font=tkfont.Font(size=12)).pack(side="left", padx=(2, 8))
+        tk.Label(frm, text="Fernwartung aktiv – %s sieht und steuert diesen Bildschirm" % who,
+                 bg=RED, fg="#FFFFFF", font=tkfont.Font(size=10, weight="bold")).pack(side="left")
+        tk.Button(frm, text="Trennen", command=on_disconnect, bg="#FFFFFF", fg=RED, relief="flat",
+                  padx=14, pady=3, font=tkfont.Font(size=10, weight="bold")).pack(side="left", padx=14)
+        b.update_idletasks()
+        b.geometry("+%d+%d" % ((b.winfo_screenwidth() - b.winfo_width()) // 2, 8))
+        self._pulse(b, 0)
+
+    def _pulse(self, b, step):
+        if not b.winfo_exists():
+            return
+        try:
+            b.attributes("-alpha", 0.8 + 0.18 * abs(((step % 20) / 10.0) - 1))
+        except Exception:
+            pass
+        b.after(80, lambda: self._pulse(b, step + 1))
+
+    def hide_banner(self):
+        if self.banner:
+            try:
+                self.banner.destroy()
+            except Exception:
+                pass
+            self.banner = None
+
+    # ---- Chat-Fenster (waehrend der Sitzung) ----
+    def show_chat(self, on_send):
+        if getattr(self, "chat", None) and self.chat.winfo_exists():
+            self.chat.deiconify(); return
+        w = self.chat = tk.Toplevel(self.root); w.title("Chat – Fernwartung"); w.configure(bg=BG)
+        _set_icon(w)
+        self.chat_log = tk.Text(w, width=42, height=14, bg=CARD, fg=FG, relief="flat", wrap="word", state="disabled",
+                                font=tkfont.Font(size=10)); self.chat_log.pack(padx=12, pady=(12, 6))
+        row = tk.Frame(w, bg=BG); row.pack(fill="x", padx=12, pady=(0, 12))
+        ent = tk.Entry(row, bg="#2A2F45", fg=FG, relief="flat", insertbackground=FG, font=tkfont.Font(size=11)); ent.pack(side="left", fill="x", expand=True, ipady=5)
+        def go(_=None):
+            t = ent.get().strip()
+            if t:
+                on_send(t); self.add_chat(t, True); ent.delete(0, "end")
+        ent.bind("<Return>", go)
+        tk.Button(row, text="Senden", command=go, bg=ACC2, fg="#06281C", relief="flat",
+                  font=tkfont.Font(size=10, weight="bold")).pack(side="left", padx=(8, 0))
+        w.protocol("WM_DELETE_WINDOW", w.withdraw)
+        self._center(w, 2)
+
+    def add_chat(self, text, me):
+        try:
+            if not getattr(self, "chat", None) or not self.chat.winfo_exists():
+                return
+            self.chat.deiconify()
+            self.chat_log.configure(state="normal")
+            self.chat_log.insert("end", ("Du: " if me else "Techniker: ") + text + "\n")
+            self.chat_log.see("end"); self.chat_log.configure(state="disabled")
+        except Exception:
+            pass
+
+    # ---- Status-Fenster der Vollversion (Host) ----
+    def show_host(self, name, ident, on_close, on_password):
+        w = self.main = tk.Toplevel(self.root); w.title(APP_NAME + " – Vollversion"); w.configure(bg=BG); w.resizable(False, False)
+        _set_icon(w); w.protocol("WM_DELETE_WINDOW", on_close)
+        tk.Label(w, text="🖥  " + BRAND + " · Fernwartung", bg=BG, fg=ACC2, font=tkfont.Font(size=13, weight="bold")).pack(padx=34, pady=(24, 2))
+        tk.Label(w, text="Dieses Gerät ist bereit für eingehende Verbindungen.", bg=BG, fg=FG, font=tkfont.Font(size=12)).pack(padx=34, pady=(6, 2))
+        card = tk.Frame(w, bg=CARD); card.pack(padx=34, pady=12, ipadx=16, ipady=12)
+        tk.Label(card, text="DIESES GERÄT", bg=CARD, fg=MUT, font=tkfont.Font(size=9, weight="bold")).pack(pady=(4, 0))
+        tk.Label(card, text=name, bg=CARD, fg=FG, font=tkfont.Font(size=18, weight="bold")).pack()
+        tk.Label(card, text="ID  " + ident, bg=CARD, fg=ACC2, font=tkfont.Font(size=11)).pack(pady=(2, 6))
+        self.host_status = tk.Label(w, text="● Bereit", bg=BG, fg=OK, font=tkfont.Font(size=10)); self.host_status.pack()
+        tk.Button(w, text="Passwort für Zugriff festlegen …", command=on_password, bg="#2A3150", fg=FG, relief="flat",
+                  padx=12, pady=6, font=tkfont.Font(size=10, weight="bold")).pack(pady=(10, 4))
+        tk.Label(w, text="Verbinden über das Intranet → Fernwartung. Jede Sitzung zeigt ein Banner und wird protokolliert.",
+                 bg=BG, fg=MUT, font=tkfont.Font(size=9), wraplength=360, justify="center").pack(padx=34, pady=(4, 20))
+        self._center(w, 3); w.deiconify()
+
+    def ask_text(self, title, prompt, show=None):
+        try:
+            from tkinter import simpledialog
+            return simpledialog.askstring(title, prompt, show=show, parent=self.root)
+        except Exception:
+            return None
+
+    def info(self, title, text):
+        try:
+            from tkinter import messagebox
+            messagebox.showinfo(title, text)
+        except Exception:
+            pass
+
+    def _center(self, w, div=2):
+        w.update_idletasks()
+        sw, sh = w.winfo_screenwidth(), w.winfo_screenheight()
+        w.geometry("+%d+%d" % ((sw - w.winfo_width()) // 2, (sh - w.winfo_height()) // div))
+
+    def run_soon(self, fn):
+        self.root.after(0, fn)
+
+
+# ---------------------------------------------------------------------------
+# Netzwerk-/Sitzungslogik
+# ---------------------------------------------------------------------------
+class Agent:
+    def __init__(self, ui, mode):
+        self.ui = ui
+        self.mode = mode
+        self.ident = {}
+        self.stop = False
+        self.pc = None
+        self.active_sid = None
+        self._disconnect_evt = None
+        self.loop = None
+        self._mac_hint = False
+
+    async def run(self):
+        self.loop = asyncio.get_event_loop()
+        async with aiohttp.ClientSession() as s:
+            sig = Signal(s)
+            if self.mode == "quick":
+                reg = await sig.call({"action": "register", "name": device_label(), "os": os_label()})
+                self.ident = {"code": reg["code"], "key": reg["key"]}
+                self.ui.run_soon(lambda: self.ui.set_code(reg["code"]))
+            else:
+                cfg = load_config()
+                if not cfg.get("device") or not cfg.get("token"):
+                    raise RuntimeError("Dieses Gerät ist noch nicht eingerichtet (zuerst: --enroll).")
+                self.ident = {"device": cfg["device"], "token": cfg["token"]}
+            await self.poll_loop(sig)
+
+    async def poll_loop(self, sig):
+        while not self.stop:
+            try:
+                payload = {"action": "poll"}
+                payload.update(self.ident)
+                if self.mode == "service":
+                    payload["os"] = os_label()
+                res = await sig.call(payload)
+                self.ui.run_soon(lambda: self.ui.set_status("Bereit – warte auf Verbindung …", MUT, "#34D399"))
+                sess = res.get("session")
+                if sess and sess.get("sid") and sess["sid"] != self.active_sid:
+                    await self.handle_session(sig, sess, res.get("unattended", "ask"))
+            except Exception:
+                self.ui.run_soon(lambda: self.ui.set_status("Verbinde mit dem Intranet …", "#F5B14C", "#F5B14C"))
+            await asyncio.sleep(POLL_SECS)
+
+    async def handle_session(self, sig, sess, unattended):
+        sid = sess["sid"]; who = sess.get("byName", "Ein Techniker")
+        self.ui.run_soon(lambda: self.ui.set_status("Anfrage von %s …" % who, ACC2, ACC2))
+        allow = False
+        if self.mode == "quick" or unattended == "ask":
+            result = [None]
+            self.ui.run_soon(lambda: self.ui.ask_consent(who, 30, result))
+            while result[0] is None and not self.stop:
+                await asyncio.sleep(0.2)
+            allow = bool(result[0])
+        elif unattended == "allow":
+            allow = True
+        if not allow:
+            await sig.call(dict({"action": "decline", "sid": sid, "reason": "am Gerät abgelehnt"}, **self.ident))
+            self.ui.run_soon(lambda: self.ui.set_status("Anfrage abgelehnt.", MUT, "#8A93A6"))
+            return
+        await sig.call(dict({"action": "accept", "sid": sid}, **self.ident))
+        try:
+            await self.run_session(sig, sid, who)
+        finally:
+            self.active_sid = None
+            self.ui.run_soon(self.ui.hide_banner)
+            self.ui.run_soon(lambda: self.ui.set_status("Sitzung beendet. Bereit.", MUT, "#34D399"))
+            if self.mode == "quick":
+                try:
+                    reg = await sig.call({"action": "register", "name": device_label(), "os": os_label()})
+                    self.ident = {"code": reg["code"], "key": reg["key"]}
+                    self.ui.run_soon(lambda: self.ui.set_code(reg["code"]))
+                except Exception:
+                    pass
+
+    async def run_session(self, sig, sid, who):
+        self.active_sid = sid
+        self.ui.run_soon(lambda: self.ui.set_status("Verbindung wird aufgebaut …", ACC2, ACC2))
+        off = await sig.call(dict({"action": "getOffer", "sid": sid}, **self.ident))
+        offer = off.get("offer")
+        if not offer:
+            for _ in range(12):
+                await asyncio.sleep(0.6)
+                off = await sig.call(dict({"action": "getOffer", "sid": sid}, **self.ident))
+                offer = off.get("offer")
+                if offer:
+                    break
+        if not offer:
+            raise RuntimeError("Kein Angebot erhalten")
+        ice = [RTCIceServer(**srv) if isinstance(srv, dict) else RTCIceServer(urls=srv) for srv in off.get("ice", [])]
+        self.pc = pc = RTCPeerConnection(RTCConfiguration(iceServers=ice) if ice else None)
+        track = ScreenTrack()
+        handler = InputHandler(track)
+        pc.addTrack(track)
+        self._disconnect_evt = asyncio.Event()
+
+        self._dc = None
+        recv = {}   # laufende Datei-Empfaenge
+
+        def save_file(name, b64):
+            import base64
+            folder = os.path.join(os.path.expanduser("~"), "Desktop", "AlexReviewit-Empfangen")
+            try:
+                os.makedirs(folder, exist_ok=True)
+            except Exception:
+                folder = os.path.expanduser("~")
+            safe = "".join(c for c in (name or "datei") if c not in '\\/:*?"<>|').strip() or "datei"
+            path = os.path.join(folder, safe)
+            n = 1
+            while os.path.exists(path):
+                base, ext = os.path.splitext(os.path.join(folder, safe)); path = "%s (%d)%s" % (base, n, ext); n += 1
+            with open(path, "wb") as f:
+                f.write(base64.b64decode(b64))
+            return os.path.basename(path)
+
+        def send_dc(o):
+            try:
+                if self._dc and self._dc.readyState == "open":
+                    self._dc.send(json.dumps(o))
+            except Exception:
+                pass
+
+        @pc.on("datachannel")
+        def on_dc(channel):
+            self._dc = channel
+
+            @channel.on("message")
+            def on_msg(message):
+                try:
+                    m = json.loads(message)
+                except Exception:
+                    return
+                t = m.get("t")
+                if t == "hello":
+                    send_dc({"t": "mon", "list": track.monitor_list(), "cur": track.index})
+                elif t == "setmon":
+                    track.set_monitor(int(m.get("i", 0)))
+                elif t == "clip":
+                    self.ui.run_soon(lambda s=str(m.get("s", "")): self._set_clipboard(s))
+                elif t == "chat":
+                    self.ui.run_soon(lambda s=str(m.get("s", "")): (self.ui.show_chat(lambda x: send_dc({"t": "chat", "s": x})), self.ui.add_chat(s, False)))
+                elif t == "file-begin":
+                    recv[m.get("id")] = {"name": m.get("name", "datei"), "parts": []}
+                elif t == "file-chunk":
+                    r = recv.get(m.get("id"));  r and r["parts"].append(m.get("data", ""))
+                elif t == "file-end":
+                    r = recv.pop(m.get("id"), None)
+                    if r:
+                        try:
+                            nm = save_file(r["name"], "".join(r["parts"]))
+                            send_dc({"t": "file-ok", "name": nm})
+                            self.ui.run_soon(lambda nm=nm: self.ui.add_chat("Datei empfangen: " + nm + "  (Ordner „AlexReviewit-Empfangen“ auf dem Schreibtisch)", False) if getattr(self.ui, "chat", None) else None)
+                        except Exception:
+                            pass
+                else:
+                    handler.handle(m)
+
+        @pc.on("connectionstatechange")
+        async def on_state():
+            if pc.connectionState in ("failed", "closed", "disconnected"):
+                self._disconnect_evt.set()
+
+        await pc.setRemoteDescription(RTCSessionDescription(sdp=offer, type="offer"))
+        answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+        await self._ice_complete(pc)
+        await sig.call(dict({"action": "answer", "sid": sid, "sdp": pc.localDescription.sdp}, **self.ident))
+        self.ui.run_soon(lambda: self.ui.show_banner(who, self.request_disconnect))
+        self.ui.run_soon(lambda: self.ui.set_status("Verbunden mit %s" % who, OK, OK))
+
+        while not self.stop:
+            if self._disconnect_evt.is_set():
+                break
+            if IS_MAC and not self._mac_hint and track.black_frames > 20:
+                self._mac_hint = True
+                self.ui.run_soon(lambda: self.ui.info(
+                    "Bildschirmaufnahme erlauben",
+                    "macOS überträgt noch kein Bild.\n\nBitte unter Systemeinstellungen → Datenschutz & Sicherheit →\n"
+                    "Bildschirmaufnahme das Programm '%s' erlauben und danach neu starten.\n"
+                    "Für die Steuerung zusätzlich 'Bedienungshilfen' erlauben." % APP_NAME))
+            try:
+                st = await sig.call(dict({"action": "state", "sid": sid}, **self.ident))
+                if st.get("state") == "ended":
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(2.0)
+        try:
+            await sig.call(dict({"action": "end", "sid": sid, "reason": "beendet"}, **self.ident))
+        except Exception:
+            pass
+        await pc.close()
+        self.pc = None
+
+    async def _ice_complete(self, pc):
+        if pc.iceGatheringState == "complete":
+            return
+        evt = asyncio.Event()
+
+        @pc.on("icegatheringstatechange")
+        def _chg():
+            if pc.iceGatheringState == "complete":
+                evt.set()
+
+        try:
+            await asyncio.wait_for(evt.wait(), timeout=3.0)
+        except asyncio.TimeoutError:
+            pass
+
+    def _set_clipboard(self, text):
+        try:
+            self.ui.root.clipboard_clear(); self.ui.root.clipboard_append(text)
+        except Exception:
+            pass
+
+    def request_disconnect(self):
+        if self._disconnect_evt and self.loop:
+            self.loop.call_soon_threadsafe(self._disconnect_evt.set)
+
+    def request_quit(self):
+        self.stop = True
+        if self._disconnect_evt and self.loop:
+            self.loop.call_soon_threadsafe(self._disconnect_evt.set)
+        try:
+            self.ui.root.after(300, self.ui.root.destroy)
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Einrichtung eines hinterlegten Geräts
+# ---------------------------------------------------------------------------
+async def do_enroll(enroll_code, name, password=None):
+    async with aiohttp.ClientSession() as s:
+        sig = Signal(s)
+        payload = {"action": "enroll", "enrollCode": enroll_code, "name": name or device_label(), "os": os_label()}
+        if password:
+            payload["password"] = password
+        res = await sig.call(payload)
+        save_config({"device": res["device"], "token": res["token"], "name": res.get("name")})
+        return res
+
+
+async def set_password(password):
+    cfg = load_config()
+    if not cfg.get("device"):
+        raise RuntimeError("nicht eingerichtet")
+    async with aiohttp.ClientSession() as s:
+        return await Signal(s).call({"action": "setpw", "device": cfg["device"], "token": cfg["token"], "password": password or ""})
+
+
+def run_enroll(args):
+    code = args.code
+    if not code:
+        try:
+            code = input("Einrichtungs-Code (6 Stellen, aus dem Intranet): ").strip()
+        except EOFError:
+            code = ""
+    code = "".join(ch for ch in (code or "") if ch.isdigit())[:6]
+    if len(code) != 6:
+        print("Kein gültiger 6-stelliger Code.")
+        return 1
+    try:
+        res = asyncio.run(do_enroll(code, args.name, getattr(args, "pw", None)))
+        print("Gerät eingerichtet:", res.get("name"))
+        print("Dauerhaft starten:  --service")
+        return 0
+    except Exception as e:
+        print("Einrichtung fehlgeschlagen:", e)
+        return 1
+
+
+# ---------------------------------------------------------------------------
+# Start
+# ---------------------------------------------------------------------------
+def main():
+    ap = argparse.ArgumentParser(description=APP_NAME)
+    ap.add_argument("--service", action="store_true", help="hinterlegtes Gerät (unbeaufsichtigt)")
+    ap.add_argument("--edition", choices=["quick", "full"], help="quick = Schnellhilfe, full = Vollversion (Host)")
+    ap.add_argument("--enroll", action="store_true", help="Gerät einmalig einrichten")
+    ap.add_argument("--code", help="Einrichtungs-Code (bei --enroll)")
+    ap.add_argument("--pw", help="Zugriffs-Passwort (optional, bei --enroll)")
+    ap.add_argument("--name", help="Anzeigename des Geräts")
+    args, _ = ap.parse_known_args()
+
+    if args.enroll:
+        sys.exit(run_enroll(args))
+
+    edition = args.edition or ("full" if args.service else "quick")
+    mode = "quick" if edition == "quick" else "service"
+    ui = UI(mode)
+
+    # Vollversion: erst einrichten, falls noch nicht geschehen
+    if mode == "service" and not (load_config().get("device") and load_config().get("token")):
+        tmp = tk.Tk(); tmp.withdraw()
+        try:
+            from tkinter import simpledialog, messagebox
+            messagebox.showinfo(APP_NAME, "Vollversion einrichten:\nBitte den 6-stelligen Einrichtungs-Code aus dem Intranet\n(Fernwartung → Gerät hinzufügen) eingeben.")
+            code = simpledialog.askstring(APP_NAME, "Einrichtungs-Code (6 Stellen):") or ""
+            code = "".join(ch for ch in code if ch.isdigit())[:6]
+            pw = simpledialog.askstring(APP_NAME, "Zugriffs-Passwort setzen (optional, mind. 4 Zeichen,\nleer = Nachfrage am Gerät):", show="•") or ""
+        finally:
+            tmp.destroy()
+        if len(code) != 6:
+            return
+        try:
+            asyncio.run(do_enroll(code, device_label(), pw if len(pw) >= 4 else None))
+        except Exception as e:
+            UI("quick").info(APP_NAME, "Einrichtung fehlgeschlagen: %s" % e)
+            return
+
+    agent = Agent(ui, mode)
+
+    if mode == "quick":
+        ui.show_main(agent.request_quit)
+    else:
+        cfg = load_config()
+        ident = str(cfg.get("device", ""))[-9:].upper() or "–"
+
+        def change_pw():
+            pw = ui.ask_text(APP_NAME, "Neues Zugriffs-Passwort (leer = entfernen):", show="•")
+            if pw is None:
+                return
+            try:
+                asyncio.run(set_password(pw))
+                ui.info(APP_NAME, "Passwort gespeichert." if pw else "Passwort entfernt.")
+            except Exception as e:
+                ui.info(APP_NAME, "Fehler: %s" % e)
+
+        ui.show_host(cfg.get("name") or device_label(), ident, agent.request_quit, change_pw)
+
+    def net_thread():
+        try:
+            asyncio.run(agent.run())
+        except Exception as e:
+            ui.run_soon(lambda: (ui.set_status("Fehler: %s" % e, RED, RED) if getattr(ui, "status_lbl", None) else None))
+
+    threading.Thread(target=net_thread, daemon=True).start()
+    try:
+        ui.root.mainloop()
+    except KeyboardInterrupt:
+        pass
+    agent.stop = True
+
+
+if __name__ == "__main__":
+    main()
