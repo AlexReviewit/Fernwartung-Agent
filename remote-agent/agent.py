@@ -69,7 +69,7 @@ def _bundled_build():
 
 
 AGENT_VERSION = _bundled_build()   # wird beim automatischen Update verglichen
-RELEASE_BASE = os.environ.get("IR_RELEASE_BASE", "https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest/download")
+RELEASE_BASE = os.environ.get("IR_RELEASE_BASE", "https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download")
 UPDATE_EVERY = 6 * 3600          # alle 6 Stunden auf neue Version prüfen
 
 
@@ -136,12 +136,9 @@ def os_label():
 # ---------------------------------------------------------------------------
 # Automatisches Update – prüft version.json im GitHub-Repo
 # ---------------------------------------------------------------------------
-VERSION_URL = os.environ.get(
-    "IR_VERSION_URL",
-    # Datei liegt dem neuesten Release bei und wird bei jedem Bau automatisch
-    # aktualisiert – so muss nie etwas von Hand geändert werden.
-    "https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest/download/version.json",
-)
+REPO_BASE = os.environ.get("IR_REPO_BASE", "https://github.com/AlexReviewit/Fernwartung-Agent")
+RELEASE_LATEST = REPO_BASE + "/releases/latest"
+VERSION_URL = os.environ.get("IR_VERSION_URL", RELEASE_LATEST + "/download/version.json")
 
 
 def _ver_tuple(v):
@@ -154,8 +151,18 @@ def _ver_tuple(v):
     return tuple(out)
 
 
-def check_update():
-    """Liefert (neue_version, download_seite) wenn eine neuere Version existiert, sonst None."""
+def installer_name(mode):
+    """Dateiname des passenden Downloads für dieses Betriebssystem und diese Ausgabe."""
+    full = mode != "quick"
+    if IS_WIN:
+        return "AlexReviewit-Fernwartung-Setup.exe" if full else "AlexReviewit-Schnellhilfe.exe"
+    if IS_MAC:
+        return ("AlexReviewit-Fernwartung.pkg" if full else "AlexReviewit-Schnellhilfe.pkg")
+    return None
+
+
+def check_update(mode="service"):
+    """Prüft version.json des neuesten Releases. Gibt dict zurück oder None."""
     try:
         import urllib.request
         req = urllib.request.Request(VERSION_URL, headers={"User-Agent": "AlexReviewit-Fernwartung"})
@@ -163,8 +170,9 @@ def check_update():
             data = json.loads(r.read().decode("utf-8"))
         latest = str(data.get("version", "")).strip()
         if latest and _ver_tuple(latest) > _ver_tuple(AGENT_VERSION):
-            page = data.get("page") or "https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest"
-            return (latest, page)
+            name = installer_name(mode)
+            url = (RELEASE_LATEST + "/download/" + name) if name else None
+            return {"ver": latest, "page": data.get("page") or RELEASE_LATEST, "url": url, "name": name}
     except Exception:
         pass
     return None
@@ -655,14 +663,21 @@ class UI:
         self.update_bar = tk.Frame(pad, bg="#15321F")
         self._update_lbl = tk.Label(self.update_bar, text="", bg="#15321F", fg="#8CE0B4",
                                     font=ui_font(10, "bold")); self._update_lbl.pack(side="left", padx=(14, 8), pady=9)
-        self._update_btn = tk.Button(self.update_bar, text="Herunterladen", bg=OK, fg="#06250F", relief="flat",
-                                     padx=12, pady=4, font=ui_font(9, "bold"), cursor="hand2", bd=0); self._update_btn.pack(side="left", padx=(0, 12), pady=9)
+        self._update_later = tk.Button(self.update_bar, text="Später", bg="#15321F", fg="#8CE0B4", relief="flat",
+                                       padx=8, pady=4, font=ui_font(9, "bold"), cursor="hand2", bd=0,
+                                       command=self.update_bar.pack_forget)
+        self._update_later.pack(side="right", padx=(0, 10), pady=9)
+        self._update_btn = tk.Button(self.update_bar, text="Jetzt aktualisieren", bg=OK, fg="#06250F", relief="flat",
+                                     padx=12, pady=4, font=ui_font(9, "bold"), cursor="hand2", bd=0); self._update_btn.pack(side="right", pady=9)
         # Aktionen
         act = tk.Frame(pad, bg=BG); act.pack(padx=34, pady=(14, 6), fill="x")
         tk.Button(act, text="Intranet öffnen", command=cb["open"], bg=ACC, fg="#0C0A26", activebackground="#a99bff",
                   relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="left")
         tk.Button(act, text="Im Hintergrund", command=w.iconify, bg=PANEL, fg=FG, activebackground="#2A3150",
                   relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="left", padx=8)
+        if cb.get("checkupdate"):
+            tk.Button(act, text="Nach Updates suchen", command=cb["checkupdate"], bg=PANEL, fg=MUT, activebackground="#2A3150",
+                      relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="left")
         tk.Button(act, text="Beenden", command=cb["close"], bg=PANEL, fg=MUT, activebackground="#3A2130",
                   relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="right")
         _vshow = ("Version " + AGENT_VERSION) if AGENT_VERSION != "0" else "Entwicklungs-Version"
@@ -762,13 +777,35 @@ class UI:
         except Exception:
             pass
 
-    def show_update(self, ver, page):
-        """Zeigt den Update-Hinweis im Host-Fenster an."""
+    def open_url(self, url):
         try:
             import webbrowser
-            self._update_lbl.config(text="⬆  Neue Version %s verfügbar" % ver)
-            self._update_btn.config(command=lambda: webbrowser.open(page))
-            self.update_bar.pack(padx=34, pady=(2, 6))
+            webbrowser.open(url)
+        except Exception:
+            pass
+
+    def show_update(self, info, on_update):
+        """Zeigt den Update-Hinweis mit Ein-Klick-Aktualisierung."""
+        try:
+            ver = info.get("ver") if isinstance(info, dict) else info
+            self._update_lbl.config(text="⬆  Version %s ist verfügbar" % ver)
+            self._update_btn.config(text="Jetzt aktualisieren", state="normal",
+                                    command=lambda: (self._update_btn.config(state="disabled", text="…"),
+                                                     self._update_later.pack_forget(), on_update(info)))
+            try:
+                self._update_later.pack(side="right", padx=(0, 10), pady=9)
+            except Exception:
+                pass
+            if not self.update_bar.winfo_ismapped():
+                self.update_bar.pack(padx=34, pady=(2, 6), fill="x")
+        except Exception:
+            pass
+
+    def set_update_progress(self, text):
+        try:
+            self._update_lbl.config(text="⬆  " + text)
+            if not self.update_bar.winfo_ismapped():
+                self.update_bar.pack(padx=34, pady=(2, 6), fill="x")
         except Exception:
             pass
 
@@ -831,14 +868,63 @@ class Agent:
         """Prüft regelmäßig auf eine neue Version (nur Vollversion/hinterlegtes Gerät)."""
         await asyncio.sleep(5)
         while not self.stop:
-            try:
-                res = await self.loop.run_in_executor(None, check_update)
-                if res:
-                    ver, page = res
-                    self.ui.run_soon(lambda v=ver, p=page: getattr(self.ui, "show_update", lambda *_: None)(v, p))
-            except Exception:
-                pass
+            await self.check_for_update()
             await asyncio.sleep(UPDATE_EVERY)
+
+    async def check_for_update(self):
+        try:
+            res = await self.loop.run_in_executor(None, lambda: check_update(self.mode))
+            if res and hasattr(self.ui, "show_update"):
+                self.ui.run_soon(lambda r=res: self.ui.show_update(r, self.start_update))
+            return res
+        except Exception:
+            return None
+
+    def start_update(self, info):
+        """Lädt den passenden Installer herunter und startet ihn (ein Klick)."""
+        threading.Thread(target=self._do_update, args=(info,), daemon=True).start()
+
+    def _do_update(self, info):
+        import tempfile
+        import urllib.request
+        url = (info or {}).get("url")
+        if not url:
+            self.ui.run_soon(lambda: self.ui.open_url((info or {}).get("page") or RELEASE_LATEST))
+            return
+        try:
+            self.ui.run_soon(lambda: self.ui.set_update_progress("Lädt herunter …"))
+            dest = os.path.join(tempfile.gettempdir(), info.get("name") or "AlexReviewit-Update")
+            req = urllib.request.Request(url, headers={"User-Agent": "AlexReviewit-Fernwartung"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                total = int(r.headers.get("Content-Length") or 0)
+                got = 0
+                with open(dest, "wb") as f:
+                    while True:
+                        chunk = r.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk); got += len(chunk)
+                        if total:
+                            pct = int(got * 100 / total)
+                            self.ui.run_soon(lambda p=pct: self.ui.set_update_progress("Lädt herunter … %d %%" % p))
+            self.ui.run_soon(lambda: self.ui.set_update_progress("Installation wird gestartet …"))
+            # Installer starten – danach beendet sich das Programm, damit es ersetzt werden kann
+            if IS_WIN:
+                os.startfile(dest)   # noqa: S606 – vom Nutzer ausgelöstes Update
+            elif IS_MAC:
+                import subprocess
+                subprocess.Popen(["open", dest])
+            else:
+                self.ui.run_soon(lambda: self.ui.open_url(info.get("page") or RELEASE_LATEST)); return
+            self.ui.run_soon(lambda: (self.ui.info(APP_NAME,
+                "Das Update wurde geladen und der Installer gestartet.\n"
+                "Bitte den Anweisungen folgen – dieses Fenster schließt sich jetzt."), self.request_quit()))
+        except Exception as e:
+            msg = str(e)
+            self.ui.run_soon(lambda: (self.ui.set_update_progress("Update fehlgeschlagen"),
+                                      self.ui.info(APP_NAME,
+                "Automatisches Update nicht möglich (%s).\n\nBitte lade die neue Version von der Webseite herunter." % msg),
+                                      self.ui.open_url(info.get("page") or RELEASE_LATEST)))
 
     async def poll_loop(self, sig):
         while not self.stop:
@@ -866,7 +952,10 @@ class Agent:
             while result[0] is None and not self.stop:
                 await asyncio.sleep(0.2)
             allow = bool(result[0])
-        elif unattended == "allow":
+        elif unattended in ("allow", "password"):
+            # „Automatisch" und „Passwort" sind unbeaufsichtigt: beim Passwort-Modus
+            # hat der Server das Zugriffs-Passwort bereits geprüft, bevor die Sitzung
+            # überhaupt entstanden ist – hier wird daher nicht erneut nachgefragt.
             allow = True
         if not allow:
             await sig.call(dict({"action": "decline", "sid": sid, "reason": "am Gerät abgelehnt"}, **self.ident))
@@ -1234,9 +1323,19 @@ def main():
             except Exception:
                 pass
 
+        def check_update_now():
+            def worker():
+                res = check_update(agent.mode)
+                if res:
+                    ui.run_soon(lambda: ui.show_update(res, agent.start_update))
+                else:
+                    ui.run_soon(lambda: ui.info(APP_NAME, "Du hast bereits die neueste Version (Version %s)."
+                                                % (AGENT_VERSION if AGENT_VERSION != "0" else "–")))
+            threading.Thread(target=worker, daemon=True).start()
+
         ui.show_host(cfg.get("name") or device_label(), ident,
                      {"close": agent.request_quit, "open": open_intranet, "mode": change_mode,
-                      "pwstyle": on_pwstyle, "pwaction": on_pwaction})
+                      "pwstyle": on_pwstyle, "pwaction": on_pwaction, "checkupdate": check_update_now})
 
         def load_status():
             try:
