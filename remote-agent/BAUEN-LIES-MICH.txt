@@ -1,42 +1,51 @@
-FERNWARTUNG – FERTIGE PROGRAMME (.exe / .pkg) BAUEN
-===================================================
-Es gibt drei Wege. Die fertigen Dateien sind EINE Datei zum Weitergeben
-(keine Python-Installation beim Gegenueber noetig).
+FERNWARTUNG – FERTIGE PROGRAMME BAUEN
+=====================================
 
-WEG A – In der GitHub-Cloud bauen (kein eigener Windows/Mac noetig) EMPFOHLEN
-  1. Den Ordner dieses Projekts in ein GitHub-Repository legen (die Datei
-     .github/workflows/build-fernwartung.yml ist schon dabei).
-  2. Auf GitHub: Reiter "Actions" -> "Build Fernwartung" -> "Run workflow".
-  3. Nach ein paar Minuten unter dem Lauf bei "Artifacts" herunterladen:
-       - Windows  -> AlexReviewit-Schnellhilfe.exe  UND  AlexReviewit-Fernwartung.exe
-       - macOS    -> AlexReviewit-Schnellhilfe.pkg  UND  AlexReviewit-Fernwartung.pkg
-     (Schnellhilfe = QuickSupport, Fernwartung = Vollversion/Host)
-     Mit einem Git-Tag "fernwartung-v1" legt der Lauf zusaetzlich ein Release
-     mit allen vier Dateien an (feste Download-Links).
+EMPFOHLEN: AUTOMATISCH IN DER GITHUB-CLOUD
+  Jede Aenderung im Ordner remote-agent/ , die nach "main" gepusht wird, baut
+  automatisch (kein eigener Windows/Mac noetig) und veroeffentlicht:
 
-WEG B – Auf einem Windows-PC (fuer die .exe)
-  Doppelklick auf  BUILD-Windows.cmd
-  Ergebnis:  fertig\AlexReviewit-Schnellhilfe.exe
+    • "⭐ Neueste Version"  – zeigt immer den aktuellsten Build (feste Download-Links).
+    • "Version N"           – eine neue, fortlaufend nummerierte Version (1, 2, 3 …).
+                              Alte Versionen bleiben dauerhaft erhalten.
 
-WEG C – Auf einem Mac (fuer .app und .pkg)
-  Doppelklick auf  BUILD-Mac.command
-  Ergebnis:  fertig/AlexReviewit-Fernwartung.app  und  .pkg
+  Dateien pro Release:
+    • AlexReviewit-Schnellhilfe.exe        (Windows, QuickSupport, keine Installation)
+    • AlexReviewit-Fernwartung-Setup.exe   (Windows, Vollversion – Installer)
+    • AlexReviewit-Schnellhilfe.pkg        (macOS, QuickSupport)
+    • AlexReviewit-Fernwartung.pkg         (macOS, Vollversion – Installer)
+    • version.json                         (steuert das automatische Update)
 
-BENUTZUNG der fertigen Dateien
-  • Schnellhilfe (fuer Kunden/Mitarbeiter): die .exe bzw. .pkg/.app weitergeben.
-    Doppelklick -> zeigt den 6-stelligen Code. Keine Installation/Adminrechte.
-  • Eigenes Geraet dauerhaft hinterlegen (unbeaufsichtigt):
-      Windows:  AlexReviewit-Schnellhilfe.exe --enroll   (dann Code eingeben)
-                danach Autostart:  AlexReviewit-Schnellhilfe.exe --service
-      macOS:    "AlexReviewit-Fernwartung.app/Contents/MacOS/AlexReviewit-Fernwartung" --enroll
-    (Die Skripte GERAET-EINRICHTEN-* richten das inkl. Autostart automatisch ein,
-     funktionieren mit Python ODER mit der gebauten Datei.)
+  Die Versionsnummer wird beim Bauen in build.txt geschrieben und ins Programm
+  gepackt, damit das automatische Update sie vergleichen kann. Der Windows-Installer
+  wird mit Inno Setup aus Fernwartung.iss gebaut. Nichts davon muss man von Hand
+  anpassen – es laeuft bei jedem Push.
+
+  Manuell anstossen: GitHub -> Reiter "Actions" -> "Build Fernwartung" -> "Run workflow".
+
+LOKAL BAUEN (optional)
+  • Windows:  Doppelklick auf  BUILD-Windows.cmd
+  • macOS:    Doppelklick auf  BUILD-Mac.command
+  Ergebnis liegt im Ordner "fertig" bzw. "dist".
+
+OHNE FERTIGE DATEI (nur zum Testen, braucht Python 3)
+  • Schnellhilfe:    SCHNELLHILFE-Windows.cmd  /  SCHNELLHILFE-Mac.command
+  • Geraet einrichten: GERAET-EINRICHTEN-Windows.cmd  /  GERAET-EINRICHTEN-Mac.command
+
+AUFBAU (welche Datei macht was)
+  • agent.py           – die ganze Logik (Signaling, Bildschirm, Steuerung, Fenster,
+                         automatisches Update, Passwort-Modi)
+  • _startguard.py     – faengt Startfehler ab und zeigt/protokolliert sie
+  • schnellhilfe.py    – Einstieg Schnellhilfe (QuickSupport)
+  • vollversion.py     – Einstieg Vollversion (Host)
+  • Fernwartung.iss    – Windows-Installer (Inno Setup)
+  • version.json       – Vorlage fuer das Update (die Nummer setzt die CI)
+  • .github/workflows/build-fernwartung.yml – baut & veroeffentlicht automatisch
 
 SIGNATUR / WARNUNGEN
-  • Windows SmartScreen zeigt bei unsignierten .exe "Unbekannter Herausgeber".
-    Beheben mit einem Code-Signing-Zertifikat (kostenpflichtig) – optional.
-  • macOS Gatekeeper blockiert unsignierte Apps. Behelf: Rechtsklick -> Oeffnen,
-    oder  xattr -dr com.apple.quarantine <App>.  Sauber: Apple Developer ID,
-    CODESIGN_ID vor BUILD-Mac.command setzen und mit  xcrun notarytool  notarisieren.
+  • Windows SmartScreen zeigt bei unsignierten Dateien "Unbekannter Herausgeber"
+    (mit Code-Signing-Zertifikat behebbar, optional).
+  • macOS Gatekeeper blockiert unsignierte Apps: Rechtsklick -> "Oeffnen",
+    oder sauber per Apple Developer ID signieren und notarisieren.
 
 GROESSE: ~70–150 MB pro Datei (Python + WebRTC/FFmpeg sind mit eingepackt).

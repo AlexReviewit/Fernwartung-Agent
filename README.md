@@ -49,6 +49,7 @@ Oder direkt hier (immer die neueste Version):
 | 💻 Vollversion | [Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe) | [Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung.pkg) |
 
 Alle Versionen (auch ältere) findest du unter **[Releases](https://github.com/AlexReviewit/Fernwartung-Agent/releases)**.
+Was sich geändert hat, steht in **[CHANGELOG.md](CHANGELOG.md)**.
 
 ## Vollversion einrichten
 
@@ -72,7 +73,17 @@ Alle Versionen (auch ältere) findest du unter **[Releases](https://github.com/A
 - 🖥️ Mehrere Bildschirme umschalten
 - 📁 Dateien senden · 📋 Zwischenablage · ⌨️ Strg+Alt+Entf
 - 💬 Chat mit Zeitstempel und Absender
-- 🔄 Die Vollversion meldet **Updates** selbst und verlinkt auf die neueste Version
+
+## Automatische Updates
+
+Die Vollversion prüft von selbst auf neue Versionen. Ist eine da, erscheint im
+Fenster **„Version X ist verfügbar“** mit **„Jetzt aktualisieren“** – das Programm
+**lädt den Installer selbst herunter, startet ihn und schließt sich** (Ein‑Klick).
+Mit **„Nach Updates suchen“** kann man auch manuell prüfen.
+
+> Damit das Update (und die Downloads) für alle funktionieren, muss dieses
+> Projekt **öffentlich** sein. Einmal den neuen Installer von Hand holen, danach
+> aktualisiert sich die Vollversion selbst.
 
 ## Sicherheit
 

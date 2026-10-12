@@ -3,10 +3,10 @@
 # "Releases". Alte Versionen bleiben dauerhaft erhalten und werden nie
 # ueberschrieben. Zusaetzlich zeigt das Release "Neueste Version" immer den
 # aktuellsten Build, damit die festen Download-Links gleich bleiben:
-#   https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.exe
-#   https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung.exe
-#   https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.pkg
-#   https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung.pkg
+#   https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.exe
+#   https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe
+#   https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.pkg
+#   https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung.pkg
 name: Build Fernwartung
 on:
   workflow_dispatch:
