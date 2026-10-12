@@ -44,8 +44,18 @@ jobs:
       - run: pip install -r requirements.txt pyinstaller
       - run: pyinstaller --noconfirm --clean --onefile --noconsole --version-file version.txt --add-data "assets;assets" --add-data "build.txt;." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-submodules pynput --icon assets/icon.ico --name "AlexReviewit-Schnellhilfe" schnellhilfe.py
       - run: pyinstaller --noconfirm --clean --onefile --noconsole --version-file version.txt --add-data "assets;assets" --add-data "build.txt;." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-submodules pynput --icon assets/icon.ico --name "AlexReviewit-Fernwartung" vollversion.py
+      - name: Installer der Vollversion bauen (Inno Setup, wie bei Firefox)
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "Fernwartung.iss" "/DMyVersion=${{ needs.prep.outputs.num }}"
       - uses: actions/upload-artifact@v4
-        with: { name: Windows, path: 'remote-agent/dist/*.exe' }
+        with:
+          name: Windows
+          path: |
+            remote-agent/dist/AlexReviewit-Schnellhilfe.exe
+            remote-agent/dist/AlexReviewit-Fernwartung-Setup.exe
   macos:
     needs: prep
     runs-on: macos-latest
@@ -96,7 +106,7 @@ jobs:
 
             Feste Download-Links (zeigen immer die neueste Version):
             - Windows Schnellhilfe: /releases/latest/download/AlexReviewit-Schnellhilfe.exe
-            - Windows Vollversion:  /releases/latest/download/AlexReviewit-Fernwartung.exe
+            - Windows Vollversion (Installer): /releases/latest/download/AlexReviewit-Fernwartung-Setup.exe
             - macOS Schnellhilfe:   /releases/latest/download/AlexReviewit-Schnellhilfe.pkg
             - macOS Vollversion:    /releases/latest/download/AlexReviewit-Fernwartung.pkg
           make_latest: true

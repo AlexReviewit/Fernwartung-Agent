@@ -110,6 +110,17 @@ def save_config(cfg):
         json.dump(cfg, f)
 
 
+def update_config(**kw):
+    cfg = load_config(); cfg.update(kw); save_config(cfg); return cfg
+
+
+def gen_password(n=6):
+    """Gut lesbares Zufallspasswort (ohne verwechselbare Zeichen wie 0/O, 1/l)."""
+    import secrets
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(n))
+
+
 def device_label():
     try:
         return socket.gethostname()
@@ -546,6 +557,9 @@ class UI:
         gradient_header(w, 360, "  💬  Chat", height=48).pack()
         self.chat_log = tk.Text(w, width=42, height=13, bg=CARD, fg=FG, relief="flat", wrap="word", state="disabled",
                                 font=ui_font(10), padx=10, pady=8); self.chat_log.pack(padx=12, pady=(12, 6))
+        self.chat_log.tag_configure("meta", foreground=FAINT, font=ui_font(8, "bold"))
+        self.chat_log.tag_configure("me", foreground=ACC2)
+        self.chat_log.tag_configure("them", foreground=FG)
         row = tk.Frame(w, bg=BG); row.pack(fill="x", padx=12, pady=(0, 12))
         ent = tk.Entry(row, bg=PANEL, fg=FG, relief="flat", insertbackground=FG, font=ui_font(11)); ent.pack(side="left", fill="x", expand=True, ipady=6)
         def go(_=None):
@@ -563,8 +577,10 @@ class UI:
             if not getattr(self, "chat", None) or not self.chat.winfo_exists():
                 return
             self.chat.deiconify()
+            hh = time.strftime("%H:%M")
             self.chat_log.configure(state="normal")
-            self.chat_log.insert("end", ("Du: " if me else "Techniker: ") + text + "\n")
+            self.chat_log.insert("end", ("Du" if me else "Techniker") + " · " + hh + "\n", "meta")
+            self.chat_log.insert("end", text + "\n", ("me" if me else "them"))
             self.chat_log.see("end"); self.chat_log.configure(state="disabled")
         except Exception:
             pass
@@ -577,9 +593,12 @@ class UI:
         ("off", "Gesperrt", "Es sind keine eingehenden Verbindungen möglich."),
     ]
 
-    def show_host(self, name, ident, on_close, on_password, on_mode, on_open):
+    def show_host(self, name, ident, cb):
+        """cb: dict mit close, open, mode(mode), pwstyle(style), pwaction()"""
         W = 468
         self.host_ident = ident
+        self._pw_plain = ""
+        self._pw_style = "random"
         w = self.main = tk.Toplevel(self.root); w.title(APP_NAME + " – Vollversion"); w.configure(bg=BG); w.resizable(False, False)
         _set_icon(w)
         # Fenster schließen = in den Hintergrund (läuft weiter), nicht beenden
@@ -588,12 +607,12 @@ class UI:
         gradient_header(pad, W, "  " + BRAND, "Fernwartung · Vollversion").pack()
         # Geräte-Karte (abgerundet) mit großer ID und Kopier-Knopf
         cw = W - 68
-        cc = tk.Canvas(pad, width=cw, height=132, bg=BG, highlightthickness=0, bd=0); cc.pack(padx=34, pady=(16, 8))
+        cc = self._ident_cv = tk.Canvas(pad, width=cw, height=132, bg=BG, highlightthickness=0, bd=0); cc.pack(padx=34, pady=(16, 8))
         round_rect(cc, 1, 1, cw - 1, 131, 18, fill=CARD, outline=LINE)
         cc.create_text(22, 24, anchor="w", text="DIESES GERÄT", fill=ACC2, font=ui_font(9, "bold"))
         cc.create_text(22, 52, anchor="w", text=name, fill=FG, font=ui_font(17, "bold"))
         cc.create_text(22, 92, anchor="w", text="ID", fill=MUT, font=ui_font(9, "bold"))
-        cc.create_text(22, 110, anchor="w", text=ident, fill=ACC2, font=ui_font(16, "bold"))
+        self._ident_item = cc.create_text(22, 110, anchor="w", text=ident, fill=ACC2, font=ui_font(16, "bold"))
         _copybtn = tk.Button(cc, text="ID kopieren", command=self._copy_ident, bg=PANEL, fg=FG, activebackground="#2A3150",
                              relief="flat", padx=12, pady=5, font=ui_font(9, "bold"), cursor="hand2", bd=0)
         cc.create_window(cw - 14, 101, anchor="e", window=_copybtn)
@@ -608,18 +627,30 @@ class UI:
         seg = tk.Frame(pad, bg=LINE); seg.pack(padx=34, pady=(6, 4), fill="x")
         self._mode_btns = {}
         for i, (key, label, _hint) in enumerate(self.MODES):
-            b = tk.Button(seg, text=label, command=lambda k=key: on_mode(k), bg=PANEL, fg=MUT, relief="flat",
+            b = tk.Button(seg, text=label, command=lambda k=key: cb["mode"](k), bg=PANEL, fg=MUT, relief="flat",
                           padx=6, pady=8, font=ui_font(10, "bold"), cursor="hand2", bd=0)
             b.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 1, 0))
             seg.grid_columnconfigure(i, weight=1)
             self._mode_btns[key] = b
         self._mode_hint = tk.Label(pad, text="", bg=BG, fg=MUT, font=ui_font(9), wraplength=cw, justify="left")
-        self._mode_hint.pack(padx=34, anchor="w", pady=(2, 10))
-        # Passwort-Zeile
-        pwrow = tk.Frame(pad, bg=BG); pwrow.pack(padx=34, fill="x")
-        self._pw_lbl = tk.Label(pwrow, text="Zugriffs-Passwort: —", bg=BG, fg=FG, font=ui_font(10)); self._pw_lbl.pack(side="left")
-        tk.Button(pwrow, text="Ändern", command=on_password, bg=PANEL, fg=FG, activebackground="#2A3150", relief="flat",
-                  padx=12, pady=4, font=ui_font(9, "bold"), cursor="hand2", bd=0).pack(side="right")
+        self._mode_hint.pack(padx=34, anchor="w", pady=(2, 8))
+        # Passwort-Bereich (nur sichtbar bei Modus „Passwort“)
+        self.pwpanel = tk.Frame(pad, bg=BG)
+        styrow = tk.Frame(self.pwpanel, bg=BG); styrow.pack(anchor="w", fill="x")
+        tk.Label(styrow, text="Passwort-Art:", bg=BG, fg=MUT, font=ui_font(9, "bold")).pack(side="left", padx=(0, 8))
+        self._pwstyle_btns = {}
+        for key, label in (("random", "Zufällig (pro Sitzung)"), ("fixed", "Fest")):
+            b = tk.Button(styrow, text=label, command=lambda k=key: cb["pwstyle"](k), bg=PANEL, fg=MUT, relief="flat",
+                          padx=10, pady=4, font=ui_font(9, "bold"), cursor="hand2", bd=0)
+            b.pack(side="left", padx=(0, 6)); self._pwstyle_btns[key] = b
+        disp = tk.Frame(self.pwpanel, bg=BG); disp.pack(anchor="w", fill="x", pady=(8, 0))
+        self._pw_display = tk.Label(disp, text="—", bg=CARD, fg=FG, font=ui_font(19, "bold"), padx=14, pady=6); self._pw_display.pack(side="left")
+        self._pw_copy = tk.Button(disp, text="Kopieren", command=self._copy_pw, bg=PANEL, fg=FG, relief="flat",
+                                  padx=10, pady=6, font=ui_font(9, "bold"), cursor="hand2", bd=0); self._pw_copy.pack(side="left", padx=6)
+        self._pw_action = tk.Button(disp, text="🔄 Neu", command=lambda: cb["pwaction"](), bg=PANEL, fg=FG, relief="flat",
+                                    padx=10, pady=6, font=ui_font(9, "bold"), cursor="hand2", bd=0); self._pw_action.pack(side="left")
+        self._pw_note = tk.Label(self.pwpanel, text="", bg=BG, fg=FAINT, font=ui_font(8), wraplength=cw, justify="left")
+        self._pw_note.pack(anchor="w", pady=(6, 2))
         # Update-Hinweis (zunächst versteckt)
         self.update_bar = tk.Frame(pad, bg="#15321F")
         self._update_lbl = tk.Label(self.update_bar, text="", bg="#15321F", fg="#8CE0B4",
@@ -628,17 +659,66 @@ class UI:
                                      padx=12, pady=4, font=ui_font(9, "bold"), cursor="hand2", bd=0); self._update_btn.pack(side="left", padx=(0, 12), pady=9)
         # Aktionen
         act = tk.Frame(pad, bg=BG); act.pack(padx=34, pady=(14, 6), fill="x")
-        tk.Button(act, text="Intranet öffnen", command=on_open, bg=ACC, fg="#0C0A26", activebackground="#a99bff",
+        tk.Button(act, text="Intranet öffnen", command=cb["open"], bg=ACC, fg="#0C0A26", activebackground="#a99bff",
                   relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="left")
         tk.Button(act, text="Im Hintergrund", command=w.iconify, bg=PANEL, fg=FG, activebackground="#2A3150",
                   relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="left", padx=8)
-        tk.Button(act, text="Beenden", command=on_close, bg=PANEL, fg=MUT, activebackground="#3A2130",
+        tk.Button(act, text="Beenden", command=cb["close"], bg=PANEL, fg=MUT, activebackground="#3A2130",
                   relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="right")
         _vshow = ("Version " + AGENT_VERSION) if AGENT_VERSION != "0" else "Entwicklungs-Version"
         tk.Label(pad, text="🔒 Ende-zu-Ende verschlüsselt · " + _vshow, bg=BG, fg=FAINT,
                  font=ui_font(8)).pack(pady=(6, 14))
         self.set_host_mode("ask", False)
         self._center(w, 3); w.deiconify()
+
+    def set_ident(self, pub_id):
+        """ersetzt die angezeigte Geräte-ID durch die kurze Nummer (wie TeamViewer)."""
+        try:
+            digits = "".join(ch for ch in str(pub_id) if ch.isdigit())
+            if not digits:
+                return
+            self.host_ident = digits
+            pretty = digits
+            if len(digits) == 9:
+                pretty = digits[0:3] + " " + digits[3:6] + " " + digits[6:9]
+            self._ident_cv.itemconfigure(self._ident_item, text=pretty)
+        except Exception:
+            pass
+
+    def _copy_pw(self):
+        try:
+            if self._pw_plain:
+                self.root.clipboard_clear(); self.root.clipboard_append(self._pw_plain)
+                self._pw_copy.configure(text="Kopiert ✓")
+                self.root.after(1400, lambda: self._pw_copy.configure(text="Kopieren"))
+        except Exception:
+            pass
+
+    def set_pw_style(self, style):
+        """Hebt die gewählte Passwort-Art hervor und passt Knöpfe/Hinweis an."""
+        self._pw_style = style
+        try:
+            for key, b in getattr(self, "_pwstyle_btns", {}).items():
+                on = key == style
+                b.configure(bg=(ACC2 if on else PANEL), fg=("#06281C" if on else MUT))
+            if style == "random":
+                self._pw_action.configure(text="🔄 Neu")
+                self._pw_copy.pack(side="left", padx=6)
+                self._pw_note.configure(text="Das Passwort wechselt nach jeder Sitzung. Sag es der Person, die sich verbindet.")
+            else:
+                self._pw_action.configure(text="Ändern")
+                self._pw_copy.pack_forget()
+                self._pw_note.configure(text="Festes Passwort – bleibt gleich, bis du es änderst. Aus Sicherheitsgründen wird es nicht angezeigt.")
+        except Exception:
+            pass
+
+    def set_pw_value(self, text):
+        """Zeigt das aktuelle (zufällige) Passwort groß an; bei festem Passwort Punkte."""
+        try:
+            self._pw_plain = text if self._pw_style == "random" else ""
+            self._pw_display.configure(text=(text if (self._pw_style == "random" and text) else ("●●●●●●" if self._pw_style == "fixed" else "—")))
+        except Exception:
+            pass
 
     def _copy_ident(self):
         try:
@@ -655,8 +735,12 @@ class UI:
                 b.configure(bg=(ACC if on else PANEL), fg=("#0C0A26" if on else MUT))
             hint = dict((k, h) for k, _l, h in self.MODES).get(mode, "")
             self._mode_hint.configure(text=hint)
-            self._pw_lbl.configure(text="Zugriffs-Passwort: " + ("✓ gesetzt" if has_pw else "nicht gesetzt"),
-                                   fg=(OK if has_pw else MUT))
+            # Passwort-Bereich nur bei Modus „Passwort“ zeigen
+            if mode == "password":
+                if not self.pwpanel.winfo_ismapped():
+                    self.pwpanel.pack(padx=34, fill="x", pady=(0, 4), after=self._mode_hint)
+            else:
+                self.pwpanel.pack_forget()
         except Exception:
             pass
 
@@ -725,6 +809,7 @@ class Agent:
         self._disconnect_evt = None
         self.loop = None
         self._mac_hint = False
+        self.random_pw = None   # aktuelles Zufallspasswort (Vollversion)
 
     async def run(self):
         self.loop = asyncio.get_event_loop()
@@ -803,6 +888,20 @@ class Agent:
                     self.ui.run_soon(lambda: self.ui.set_code(reg["code"]))
                 except Exception:
                     pass
+            else:
+                # Vollversion mit Zufallspasswort: nach jeder Sitzung ein neues erzeugen
+                try:
+                    if load_config().get("pwstyle") == "random":
+                        await self.rotate_random_pw(sig)
+                except Exception:
+                    pass
+
+    async def rotate_random_pw(self, sig):
+        pw = gen_password()
+        await sig.call(dict({"action": "setpw", "password": pw}, **self.ident))
+        self.random_pw = pw
+        if hasattr(self.ui, "set_pw_value"):
+            self.ui.run_soon(lambda: (self.ui.set_pw_style("random"), self.ui.set_pw_value(pw)))
 
     async def run_session(self, sig, sid, who):
         self.active_sid = sid
@@ -968,7 +1067,7 @@ async def do_enroll(enroll_code, name, password=None):
         if password:
             payload["password"] = password
         res = await sig.call(payload)
-        save_config({"device": res["device"], "token": res["token"], "name": res.get("name")})
+        save_config({"device": res["device"], "token": res["token"], "name": res.get("name"), "pubId": res.get("pubId", "")})
         return res
 
 
@@ -1042,16 +1141,15 @@ def main():
         tmp = tk.Tk(); tmp.withdraw()
         try:
             from tkinter import simpledialog, messagebox
-            messagebox.showinfo(APP_NAME, "Vollversion einrichten:\nBitte den 6-stelligen Einrichtungs-Code aus dem Intranet\n(Fernwartung → Gerät hinzufügen) eingeben.")
+            messagebox.showinfo(APP_NAME, "Vollversion einrichten:\nBitte den 6-stelligen Einrichtungs-Code aus dem Intranet\n(Fernwartung → Gerät hinzufügen) eingeben.\n\nEin Zugriffs-Passwort brauchst du jetzt nicht – das stellst du\nnachher bequem im Programm ein (zufällig oder fest).")
             code = simpledialog.askstring(APP_NAME, "Einrichtungs-Code (6 Stellen):") or ""
             code = "".join(ch for ch in code if ch.isdigit())[:6]
-            pw = simpledialog.askstring(APP_NAME, "Zugriffs-Passwort setzen (optional, mind. 4 Zeichen,\nleer = Nachfrage am Gerät):", show="•") or ""
         finally:
             tmp.destroy()
         if len(code) != 6:
             return
         try:
-            asyncio.run(do_enroll(code, device_label(), pw if len(pw) >= 4 else None))
+            asyncio.run(do_enroll(code, device_label(), None))
         except Exception as e:
             UI("quick").info(APP_NAME, "Einrichtung fehlgeschlagen: %s" % e)
             return
@@ -1064,30 +1162,70 @@ def main():
         cfg = load_config()
         ident = str(cfg.get("device", ""))[-9:].upper() or "–"
 
-        def change_pw(after=None):
-            pw = ui.ask_text(APP_NAME, "Neues Zugriffs-Passwort (leer = entfernen):", show="•")
-            if pw is None:
-                return
+        def apply_random():
+            """Zufälliges Passwort erzeugen, setzen und anzeigen (Modus = Passwort)."""
+            pw = gen_password()
             try:
-                r = asyncio.run(set_password(pw))
-                ui.run_soon(lambda: ui.set_host_mode(r.get("unattended", "ask"), r.get("hasPw", bool(pw))))
-                ui.info(APP_NAME, "Passwort gespeichert." if pw else "Passwort entfernt.")
-                if after:
-                    after()
+                asyncio.run(set_password(pw))
+                update_config(pwstyle="random")
+                agent.random_pw = pw
+                ui.run_soon(lambda: (ui.set_host_mode("password", True), ui.set_pw_style("random"), ui.set_pw_value(pw)))
             except Exception as e:
                 ui.info(APP_NAME, "Fehler: %s" % e)
 
+        def set_fixed():
+            pw = ui.ask_text(APP_NAME, "Festes Zugriffs-Passwort (mind. 4 Zeichen):", show="•")
+            if not pw:
+                return
+            if len(pw) < 4:
+                ui.info(APP_NAME, "Passwort zu kurz (mind. 4 Zeichen).")
+                return
+            try:
+                asyncio.run(set_password(pw))
+                update_config(pwstyle="fixed")
+                agent.random_pw = None
+                ui.run_soon(lambda: (ui.set_host_mode("password", True), ui.set_pw_style("fixed"), ui.set_pw_value("")))
+                ui.info(APP_NAME, "Festes Passwort gespeichert.")
+            except Exception as e:
+                ui.info(APP_NAME, "Fehler: %s" % e)
+
+        def on_pwstyle(style):
+            if style == "random":
+                apply_random()
+            else:
+                ui.run_soon(lambda: ui.set_pw_style("fixed"))
+                set_fixed()
+
+        def on_pwaction():
+            if load_config().get("pwstyle", "random") == "fixed":
+                set_fixed()
+            else:
+                apply_random()
+
         def change_mode(mode):
+            if mode == "password":
+                style = load_config().get("pwstyle") or "random"
+                if style == "fixed":
+                    try:
+                        st = asyncio.run(get_status())
+                    except Exception:
+                        st = {}
+                    if st.get("hasPw"):
+                        try:
+                            asyncio.run(set_mode("password"))
+                        except Exception as e:
+                            ui.info(APP_NAME, "Fehler: %s" % e); return
+                        ui.run_soon(lambda: (ui.set_host_mode("password", True), ui.set_pw_style("fixed"), ui.set_pw_value("")))
+                    else:
+                        set_fixed()
+                else:
+                    apply_random()
+                return
             try:
                 r = asyncio.run(set_mode(mode))
-                ui.run_soon(lambda: ui.set_host_mode(r.get("unattended", mode), r.get("hasPw", False)))
+                ui.run_soon(lambda m=r.get("unattended", mode), h=r.get("hasPw", False): ui.set_host_mode(m, h))
             except Exception as e:
-                msg = str(e)
-                # „Nur mit Passwort" gewählt, aber noch keins gesetzt → direkt anbieten
-                if "Passwort" in msg:
-                    change_pw(after=lambda: change_mode("password"))
-                else:
-                    ui.info(APP_NAME, "Fehler: %s" % msg)
+                ui.info(APP_NAME, "Fehler: %s" % str(e))
 
         def open_intranet():
             try:
@@ -1096,13 +1234,23 @@ def main():
             except Exception:
                 pass
 
-        ui.show_host(cfg.get("name") or device_label(), ident, agent.request_quit, change_pw, change_mode, open_intranet)
+        ui.show_host(cfg.get("name") or device_label(), ident,
+                     {"close": agent.request_quit, "open": open_intranet, "mode": change_mode,
+                      "pwstyle": on_pwstyle, "pwaction": on_pwaction})
 
         def load_status():
             try:
                 r = asyncio.run(get_status())
-                ui.run_soon(lambda: (ui.set_host_mode(r.get("unattended", "ask"), r.get("hasPw", False)),
+                mode = r.get("unattended", "ask"); has_pw = r.get("hasPw", False)
+                style = load_config().get("pwstyle") or "random"
+                pub = r.get("pubId", "")
+                ui.run_soon(lambda: (ui.set_ident(pub) if pub else None,
+                                     ui.set_host_mode(mode, has_pw),
+                                     ui.set_pw_style(style),
                                      ui.set_last_access(r.get("lastAccess", 0), r.get("lastBy", ""))))
+                # Zufalls-Passwort: beim Start frisch erzeugen, damit die Anzeige stimmt
+                if mode == "password" and style == "random":
+                    apply_random()
             except Exception:
                 pass
         threading.Thread(target=load_status, daemon=True).start()
