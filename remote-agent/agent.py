@@ -52,6 +52,9 @@ APP_NAME = "Alex Reviewit Fernwartung"
 BRAND = "Alex Reviewit"
 FPS = int(os.environ.get("IR_REMOTE_FPS", "12"))
 POLL_SECS = 2.0
+AGENT_VERSION = "2026.10.12.1"   # wird beim automatischen Update verglichen
+RELEASE_BASE = os.environ.get("IR_RELEASE_BASE", "https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest/download")
+UPDATE_EVERY = 6 * 3600          # alle 6 Stunden auf neue Version prüfen
 
 
 def resource_path(rel):
@@ -101,6 +104,41 @@ def device_label():
 def os_label():
     name = {"Windows": "Windows", "Darwin": "macOS", "Linux": "Linux"}.get(platform.system(), platform.system())
     return (name + " " + platform.release())[:40]
+
+
+# ---------------------------------------------------------------------------
+# Automatisches Update – prüft version.json im GitHub-Repo
+# ---------------------------------------------------------------------------
+VERSION_URL = os.environ.get(
+    "IR_VERSION_URL",
+    "https://raw.githubusercontent.com/AlexanderEdler/Fernwartung-Agent/main/remote-agent/version.json",
+)
+
+
+def _ver_tuple(v):
+    out = []
+    for part in str(v).split("."):
+        try:
+            out.append(int(part))
+        except Exception:
+            out.append(0)
+    return tuple(out)
+
+
+def check_update():
+    """Liefert (neue_version, download_seite) wenn eine neuere Version existiert, sonst None."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(VERSION_URL, headers={"User-Agent": "AlexReviewit-Fernwartung"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        latest = str(data.get("version", "")).strip()
+        if latest and _ver_tuple(latest) > _ver_tuple(AGENT_VERSION):
+            page = data.get("page") or "https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest"
+            return (latest, page)
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -463,9 +501,26 @@ class UI:
         self.host_status = tk.Label(w, text="● Bereit", bg=BG, fg=OK, font=tkfont.Font(size=10)); self.host_status.pack()
         tk.Button(w, text="Passwort für Zugriff festlegen …", command=on_password, bg="#2A3150", fg=FG, relief="flat",
                   padx=12, pady=6, font=tkfont.Font(size=10, weight="bold")).pack(pady=(10, 4))
+        # Update-Hinweis (zunächst versteckt, erscheint wenn eine neue Version da ist)
+        self.update_bar = tk.Frame(w, bg="#243A2C")
+        self._update_lbl = tk.Label(self.update_bar, text="", bg="#243A2C", fg="#8CE0B4",
+                                    font=tkfont.Font(size=10, weight="bold")); self._update_lbl.pack(side="left", padx=(12, 8), pady=8)
+        self._update_btn = tk.Button(self.update_bar, text="Herunterladen", bg="#36C98E", fg="#06250F", relief="flat",
+                                     padx=12, pady=4, font=tkfont.Font(size=9, weight="bold")); self._update_btn.pack(side="left", padx=(0, 12), pady=8)
         tk.Label(w, text="Verbinden über das Intranet → Fernwartung. Jede Sitzung zeigt ein Banner und wird protokolliert.",
                  bg=BG, fg=MUT, font=tkfont.Font(size=9), wraplength=360, justify="center").pack(padx=34, pady=(4, 20))
+        tk.Label(w, text="Version " + AGENT_VERSION, bg=BG, fg="#5A627B", font=tkfont.Font(size=8)).pack(pady=(0, 10))
         self._center(w, 3); w.deiconify()
+
+    def show_update(self, ver, page):
+        """Zeigt den Update-Hinweis im Host-Fenster an."""
+        try:
+            import webbrowser
+            self._update_lbl.config(text="⬆  Neue Version %s verfügbar" % ver)
+            self._update_btn.config(command=lambda: webbrowser.open(page))
+            self.update_bar.pack(padx=34, pady=(2, 6))
+        except Exception:
+            pass
 
     def ask_text(self, title, prompt, show=None):
         try:
@@ -518,7 +573,21 @@ class Agent:
                 if not cfg.get("device") or not cfg.get("token"):
                     raise RuntimeError("Dieses Gerät ist noch nicht eingerichtet (zuerst: --enroll).")
                 self.ident = {"device": cfg["device"], "token": cfg["token"]}
+                asyncio.ensure_future(self.update_loop())
             await self.poll_loop(sig)
+
+    async def update_loop(self):
+        """Prüft regelmäßig auf eine neue Version (nur Vollversion/hinterlegtes Gerät)."""
+        await asyncio.sleep(5)
+        while not self.stop:
+            try:
+                res = await self.loop.run_in_executor(None, check_update)
+                if res:
+                    ver, page = res
+                    self.ui.run_soon(lambda v=ver, p=page: getattr(self.ui, "show_update", lambda *_: None)(v, p))
+            except Exception:
+                pass
+            await asyncio.sleep(UPDATE_EVERY)
 
     async def poll_loop(self, sig):
         while not self.stop:
