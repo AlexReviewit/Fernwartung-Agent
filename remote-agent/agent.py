@@ -570,36 +570,113 @@ class UI:
             pass
 
     # ---- Status-Fenster der Vollversion (Host) ----
-    def show_host(self, name, ident, on_close, on_password):
-        W = 420
+    MODES = [
+        ("ask", "Fragen", "Bei jeder Verbindung wird hier am Gerät erst gefragt."),
+        ("password", "Passwort", "Zugriff nur mit dem Zugriffs-Passwort – ohne Nachfrage."),
+        ("allow", "Automatisch", "Verbindet sofort ohne Nachfrage – nur für eigene, sichere Geräte."),
+        ("off", "Gesperrt", "Es sind keine eingehenden Verbindungen möglich."),
+    ]
+
+    def show_host(self, name, ident, on_close, on_password, on_mode, on_open):
+        W = 468
+        self.host_ident = ident
         w = self.main = tk.Toplevel(self.root); w.title(APP_NAME + " – Vollversion"); w.configure(bg=BG); w.resizable(False, False)
-        _set_icon(w); w.protocol("WM_DELETE_WINDOW", on_close)
-        pad = tk.Frame(w, bg=BG); pad.pack()
+        _set_icon(w)
+        # Fenster schließen = in den Hintergrund (läuft weiter), nicht beenden
+        w.protocol("WM_DELETE_WINDOW", w.iconify)
+        pad = tk.Frame(w, bg=BG); pad.pack(fill="both", expand=True)
         gradient_header(pad, W, "  " + BRAND, "Fernwartung · Vollversion").pack()
-        tk.Label(pad, text="Dieses Gerät ist bereit für eingehende Verbindungen.", bg=BG, fg=FG,
-                 font=ui_font(12)).pack(padx=34, pady=(18, 10))
-        # Geräte-Karte (abgerundet)
+        # Geräte-Karte (abgerundet) mit großer ID und Kopier-Knopf
         cw = W - 68
-        cc = tk.Canvas(pad, width=cw, height=118, bg=BG, highlightthickness=0, bd=0); cc.pack(padx=34, pady=(0, 10))
-        round_rect(cc, 1, 1, cw - 1, 117, 18, fill=CARD, outline=LINE)
-        cc.create_text(cw // 2, 22, text="DIESES GERÄT", fill=ACC2, font=ui_font(9, "bold"))
-        cc.create_text(cw // 2, 52, text=name, fill=FG, font=ui_font(18, "bold"))
-        cc.create_text(cw // 2, 86, text="ID  " + ident, fill=ACC2, font=ui_font(11))
-        self.host_status = tk.Label(pad, text="● Bereit", bg=BG, fg=OK, font=ui_font(10)); self.host_status.pack()
-        tk.Button(pad, text="Passwort für Zugriff festlegen …", command=on_password, bg=PANEL, fg=FG, relief="flat",
-                  padx=14, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(pady=(10, 4))
-        # Update-Hinweis (zunächst versteckt, erscheint wenn eine neue Version da ist)
+        cc = tk.Canvas(pad, width=cw, height=132, bg=BG, highlightthickness=0, bd=0); cc.pack(padx=34, pady=(16, 8))
+        round_rect(cc, 1, 1, cw - 1, 131, 18, fill=CARD, outline=LINE)
+        cc.create_text(22, 24, anchor="w", text="DIESES GERÄT", fill=ACC2, font=ui_font(9, "bold"))
+        cc.create_text(22, 52, anchor="w", text=name, fill=FG, font=ui_font(17, "bold"))
+        cc.create_text(22, 92, anchor="w", text="ID", fill=MUT, font=ui_font(9, "bold"))
+        cc.create_text(22, 110, anchor="w", text=ident, fill=ACC2, font=ui_font(16, "bold"))
+        _copybtn = tk.Button(cc, text="ID kopieren", command=self._copy_ident, bg=PANEL, fg=FG, activebackground="#2A3150",
+                             relief="flat", padx=12, pady=5, font=ui_font(9, "bold"), cursor="hand2", bd=0)
+        cc.create_window(cw - 14, 101, anchor="e", window=_copybtn)
+        # Live-Status + letzter Zugriff
+        st = tk.Frame(pad, bg=BG); st.pack(padx=34, pady=(0, 2), anchor="w")
+        self.status_dot = tk.Label(st, text="●", bg=BG, fg="#F5B14C", font=ui_font(10)); self.status_dot.pack(side="left", padx=(0, 6))
+        self.status_lbl = tk.Label(st, text="Verbinde mit dem Intranet …", bg=BG, fg=MUT, font=ui_font(10)); self.status_lbl.pack(side="left")
+        self.host_status = self.status_lbl   # Kompatibilität
+        self.host_last = tk.Label(pad, text="Letzter Zugriff: noch keiner", bg=BG, fg=FAINT, font=ui_font(9)); self.host_last.pack(padx=34, anchor="w", pady=(0, 12))
+        # Zugriffsregel (wie TeamViewer/AnyDesk, aber einfacher)
+        tk.Label(pad, text="WER DARF ZUGREIFEN?", bg=BG, fg=MUT, font=ui_font(9, "bold")).pack(padx=34, anchor="w")
+        seg = tk.Frame(pad, bg=LINE); seg.pack(padx=34, pady=(6, 4), fill="x")
+        self._mode_btns = {}
+        for i, (key, label, _hint) in enumerate(self.MODES):
+            b = tk.Button(seg, text=label, command=lambda k=key: on_mode(k), bg=PANEL, fg=MUT, relief="flat",
+                          padx=6, pady=8, font=ui_font(10, "bold"), cursor="hand2", bd=0)
+            b.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 1, 0))
+            seg.grid_columnconfigure(i, weight=1)
+            self._mode_btns[key] = b
+        self._mode_hint = tk.Label(pad, text="", bg=BG, fg=MUT, font=ui_font(9), wraplength=cw, justify="left")
+        self._mode_hint.pack(padx=34, anchor="w", pady=(2, 10))
+        # Passwort-Zeile
+        pwrow = tk.Frame(pad, bg=BG); pwrow.pack(padx=34, fill="x")
+        self._pw_lbl = tk.Label(pwrow, text="Zugriffs-Passwort: —", bg=BG, fg=FG, font=ui_font(10)); self._pw_lbl.pack(side="left")
+        tk.Button(pwrow, text="Ändern", command=on_password, bg=PANEL, fg=FG, activebackground="#2A3150", relief="flat",
+                  padx=12, pady=4, font=ui_font(9, "bold"), cursor="hand2", bd=0).pack(side="right")
+        # Update-Hinweis (zunächst versteckt)
         self.update_bar = tk.Frame(pad, bg="#15321F")
         self._update_lbl = tk.Label(self.update_bar, text="", bg="#15321F", fg="#8CE0B4",
                                     font=ui_font(10, "bold")); self._update_lbl.pack(side="left", padx=(14, 8), pady=9)
         self._update_btn = tk.Button(self.update_bar, text="Herunterladen", bg=OK, fg="#06250F", relief="flat",
                                      padx=12, pady=4, font=ui_font(9, "bold"), cursor="hand2", bd=0); self._update_btn.pack(side="left", padx=(0, 12), pady=9)
-        tk.Label(pad, text="Verbinden über das Intranet → Fernwartung. Jede Sitzung zeigt ein Banner und wird protokolliert.",
-                 bg=BG, fg=MUT, font=ui_font(9), wraplength=360, justify="center").pack(padx=34, pady=(4, 14))
+        # Aktionen
+        act = tk.Frame(pad, bg=BG); act.pack(padx=34, pady=(14, 6), fill="x")
+        tk.Button(act, text="Intranet öffnen", command=on_open, bg=ACC, fg="#0C0A26", activebackground="#a99bff",
+                  relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="left")
+        tk.Button(act, text="Im Hintergrund", command=w.iconify, bg=PANEL, fg=FG, activebackground="#2A3150",
+                  relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="left", padx=8)
+        tk.Button(act, text="Beenden", command=on_close, bg=PANEL, fg=MUT, activebackground="#3A2130",
+                  relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="right")
         _vshow = ("Version " + AGENT_VERSION) if AGENT_VERSION != "0" else "Entwicklungs-Version"
         tk.Label(pad, text="🔒 Ende-zu-Ende verschlüsselt · " + _vshow, bg=BG, fg=FAINT,
-                 font=ui_font(8)).pack(pady=(0, 16))
+                 font=ui_font(8)).pack(pady=(6, 14))
+        self.set_host_mode("ask", False)
         self._center(w, 3); w.deiconify()
+
+    def _copy_ident(self):
+        try:
+            self.root.clipboard_clear(); self.root.clipboard_append(getattr(self, "host_ident", ""))
+            self.info(APP_NAME, "Geräte-ID kopiert.")
+        except Exception:
+            pass
+
+    def set_host_mode(self, mode, has_pw):
+        """Hebt die aktive Zugriffsregel hervor und zeigt den passenden Hinweis."""
+        try:
+            for key, b in getattr(self, "_mode_btns", {}).items():
+                on = key == mode
+                b.configure(bg=(ACC if on else PANEL), fg=("#0C0A26" if on else MUT))
+            hint = dict((k, h) for k, _l, h in self.MODES).get(mode, "")
+            self._mode_hint.configure(text=hint)
+            self._pw_lbl.configure(text="Zugriffs-Passwort: " + ("✓ gesetzt" if has_pw else "nicht gesetzt"),
+                                   fg=(OK if has_pw else MUT))
+        except Exception:
+            pass
+
+    def set_last_access(self, ts, by):
+        try:
+            if not ts:
+                self.host_last.configure(text="Letzter Zugriff: noch keiner"); return
+            import time as _t
+            secs = max(0, int(_t.time()) - int(ts) // 1000 if ts > 10 ** 12 else int(_t.time()) - int(ts))
+            if secs < 90:
+                rel = "gerade eben"
+            elif secs < 3600:
+                rel = "vor %d Min." % (secs // 60)
+            elif secs < 86400:
+                rel = "vor %d Std." % (secs // 3600)
+            else:
+                rel = "vor %d Tagen" % (secs // 86400)
+            self.host_last.configure(text="Letzter Zugriff: %s%s" % ((by + ", ") if by else "", rel))
+        except Exception:
+            pass
 
     def show_update(self, ver, page):
         """Zeigt den Update-Hinweis im Host-Fenster an."""
@@ -711,6 +788,8 @@ class Agent:
             self.ui.run_soon(lambda: self.ui.set_status("Anfrage abgelehnt.", MUT, "#8A93A6"))
             return
         await sig.call(dict({"action": "accept", "sid": sid}, **self.ident))
+        if hasattr(self.ui, "set_last_access"):
+            self.ui.run_soon(lambda: self.ui.set_last_access(int(time.time()), who))
         try:
             await self.run_session(sig, sid, who)
         finally:
@@ -901,6 +980,22 @@ async def set_password(password):
         return await Signal(s).call({"action": "setpw", "device": cfg["device"], "token": cfg["token"], "password": password or ""})
 
 
+async def set_mode(mode):
+    cfg = load_config()
+    if not cfg.get("device"):
+        raise RuntimeError("nicht eingerichtet")
+    async with aiohttp.ClientSession() as s:
+        return await Signal(s).call({"action": "setmode", "device": cfg["device"], "token": cfg["token"], "mode": mode})
+
+
+async def get_status():
+    cfg = load_config()
+    if not cfg.get("device"):
+        raise RuntimeError("nicht eingerichtet")
+    async with aiohttp.ClientSession() as s:
+        return await Signal(s).call({"action": "status", "device": cfg["device"], "token": cfg["token"]})
+
+
 def run_enroll(args):
     code = args.code
     if not code:
@@ -969,17 +1064,48 @@ def main():
         cfg = load_config()
         ident = str(cfg.get("device", ""))[-9:].upper() or "–"
 
-        def change_pw():
+        def change_pw(after=None):
             pw = ui.ask_text(APP_NAME, "Neues Zugriffs-Passwort (leer = entfernen):", show="•")
             if pw is None:
                 return
             try:
-                asyncio.run(set_password(pw))
+                r = asyncio.run(set_password(pw))
+                ui.run_soon(lambda: ui.set_host_mode(r.get("unattended", "ask"), r.get("hasPw", bool(pw))))
                 ui.info(APP_NAME, "Passwort gespeichert." if pw else "Passwort entfernt.")
+                if after:
+                    after()
             except Exception as e:
                 ui.info(APP_NAME, "Fehler: %s" % e)
 
-        ui.show_host(cfg.get("name") or device_label(), ident, agent.request_quit, change_pw)
+        def change_mode(mode):
+            try:
+                r = asyncio.run(set_mode(mode))
+                ui.run_soon(lambda: ui.set_host_mode(r.get("unattended", mode), r.get("hasPw", False)))
+            except Exception as e:
+                msg = str(e)
+                # „Nur mit Passwort" gewählt, aber noch keins gesetzt → direkt anbieten
+                if "Passwort" in msg:
+                    change_pw(after=lambda: change_mode("password"))
+                else:
+                    ui.info(APP_NAME, "Fehler: %s" % msg)
+
+        def open_intranet():
+            try:
+                import webbrowser
+                webbrowser.open(BASE_URL + "/fernwartung")
+            except Exception:
+                pass
+
+        ui.show_host(cfg.get("name") or device_label(), ident, agent.request_quit, change_pw, change_mode, open_intranet)
+
+        def load_status():
+            try:
+                r = asyncio.run(get_status())
+                ui.run_soon(lambda: (ui.set_host_mode(r.get("unattended", "ask"), r.get("hasPw", False)),
+                                     ui.set_last_access(r.get("lastAccess", 0), r.get("lastBy", ""))))
+            except Exception:
+                pass
+        threading.Thread(target=load_status, daemon=True).start()
 
     def net_thread():
         try:
