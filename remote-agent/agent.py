@@ -52,7 +52,7 @@ APP_NAME = "Alex Reviewit Fernwartung"
 BRAND = "Alex Reviewit"
 FPS = int(os.environ.get("IR_REMOTE_FPS", "12"))
 POLL_SECS = 2.0
-AGENT_VERSION = "2026.10.12.1"   # wird beim automatischen Update verglichen
+AGENT_VERSION = "2026.10.12.2"   # wird beim automatischen Update verglichen
 RELEASE_BASE = os.environ.get("IR_RELEASE_BASE", "https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest/download")
 UPDATE_EVERY = 6 * 3600          # alle 6 Stunden auf neue Version prüfen
 
@@ -301,8 +301,70 @@ class InputHandler:
 import tkinter as tk  # noqa: E402
 from tkinter import font as tkfont  # noqa: E402
 
-BG = "#141829"; CARD = "#1C2135"; FG = "#F3F6FB"; ACC = "#7C8CFF"; ACC2 = "#5DADFF"
-OK = "#34D399"; RED = "#E0485F"; MUT = "#8A93A6"
+# Farben aus dem Intranet (dunkles Design): bg #11141F, Text #F3F6FB,
+# Akzent Blau→Lila→Pink. So wirken die Programme wie die Webseite.
+BG = "#11141F"; PANEL = "#171C2B"; CARD = "#1E2436"; FG = "#F3F6FB"
+ACC = "#8E7CFF"; ACC2 = "#5DADFF"; PINK = "#E0689B"
+OK = "#5BD6A0"; RED = "#E0485F"; MUT = "#B9C4D6"; FAINT = "#6B7488"; LINE = "#283460"
+GRAD = ["#5DADFF", "#8E7CFF", "#E0689B"]   # Signatur-Verlauf der Webseite
+
+_FONT_FAMILY = None
+
+
+def ui_font(size, weight="normal"):
+    """Schriftart im Webseiten-Stil (Manrope, sonst die beste System-Schrift)."""
+    global _FONT_FAMILY
+    if _FONT_FAMILY is None:
+        try:
+            fams = set(tkfont.families())
+        except Exception:
+            fams = set()
+        for cand in ("Manrope", "Segoe UI Variable", "Segoe UI", "SF Pro Text",
+                     "SF Pro Display", "Helvetica Neue", "Inter", "Arial"):
+            if cand in fams:
+                _FONT_FAMILY = cand
+                break
+        else:
+            _FONT_FAMILY = "TkDefaultFont"
+    return tkfont.Font(family=_FONT_FAMILY, size=size, weight=weight)
+
+
+def _lerp(a, b, t):
+    return int(round(a + (b - a) * t))
+
+
+def _hex(c):
+    return (int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16))
+
+
+def _grad_color(t):
+    """Farbe im 3-Stopp-Verlauf (0..1): Blau → Lila → Pink."""
+    stops = [_hex(c) for c in GRAD]
+    if t <= 0.5:
+        u = t / 0.5; a, b = stops[0], stops[1]
+    else:
+        u = (t - 0.5) / 0.5; a, b = stops[1], stops[2]
+    return "#%02x%02x%02x" % (_lerp(a[0], b[0], u), _lerp(a[1], b[1], u), _lerp(a[2], b[2], u))
+
+
+def gradient_header(parent, width, title, subtitle=None, height=64):
+    """Verlaufs-Kopfzeile wie der Hero/KI-Bereich der Webseite."""
+    cv = tk.Canvas(parent, width=width, height=height, highlightthickness=0, bd=0, bg=BG)
+    for x in range(width):
+        cv.create_line(x, 0, x, height, fill=_grad_color(x / max(1, width - 1)))
+    cv.create_text(22, height // 2 - (8 if subtitle else 0), anchor="w", text=title,
+                   fill="#FFFFFF", font=ui_font(15, "bold"))
+    if subtitle:
+        cv.create_text(22, height // 2 + 12, anchor="w", text=subtitle,
+                       fill="#F3F0FF", font=ui_font(9))
+    return cv
+
+
+def round_rect(cv, x1, y1, x2, y2, r, **kw):
+    """Abgerundetes Rechteck auf einem Canvas (für Karten im Webseiten-Look)."""
+    pts = [x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2,
+           x2 - r, y2, x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1]
+    return cv.create_polygon(pts, smooth=True, **kw)
 
 
 def _set_icon(win):
@@ -333,36 +395,36 @@ class UI:
     def show_main(self, on_close):
         if self.main and self.main.winfo_exists():
             return
+        W = 420
         w = self.main = tk.Toplevel(self.root)
         w.title(APP_NAME); w.configure(bg=BG); w.resizable(False, False)
         _set_icon(w)
         w.protocol("WM_DELETE_WINDOW", on_close)
-        pad = tk.Frame(w, bg=BG); pad.pack(padx=0, pady=0)
-        # Kopf
-        head = tk.Frame(pad, bg=BG); head.pack(fill="x", padx=34, pady=(26, 2))
-        tk.Label(head, text="🖥  " + BRAND, bg=BG, fg=ACC2, font=tkfont.Font(size=13, weight="bold")).pack(side="left")
-        tk.Label(pad, text="Fernwartung – Schnellhilfe", bg=BG, fg=FG,
-                 font=tkfont.Font(size=18, weight="bold")).pack(padx=34, pady=(6, 2))
+        pad = tk.Frame(w, bg=BG); pad.pack()
+        gradient_header(pad, W, "  " + BRAND, "Fernwartung · Schnellhilfe").pack()
         tk.Label(pad, text="Nenne diesen Code der Person, die dir hilft.", bg=BG, fg=MUT,
-                 font=tkfont.Font(size=11)).pack(padx=34, pady=(0, 14))
-        # Code-Karte
-        card = tk.Frame(pad, bg=CARD, highlightbackground="#2C3350", highlightthickness=1)
-        card.pack(padx=34, pady=(0, 14), ipadx=18, ipady=14)
-        tk.Label(card, text="SITZUNGSCODE", bg=CARD, fg=MUT, font=tkfont.Font(size=9, weight="bold")).pack(pady=(4, 2))
-        self.code_lbl = tk.Label(card, text="– – – – – –", bg=CARD, fg=FG, font=tkfont.Font(size=42, weight="bold"))
-        self.code_lbl.pack(padx=30, pady=(0, 2))
-        self.copy_btn = tk.Button(card, text="Code kopieren", command=self._copy_code, bg="#2A3150", fg=FG,
-                                  activebackground="#39416a", relief="flat", padx=12, pady=4,
-                                  font=tkfont.Font(size=10, weight="bold"))
-        self.copy_btn.pack(pady=(2, 6))
+                 font=ui_font(11)).pack(padx=34, pady=(18, 12))
+        # Code-Karte (abgerundet, im Webseiten-Look)
+        cc = tk.Canvas(pad, width=W - 68, height=138, bg=BG, highlightthickness=0, bd=0)
+        cc.pack(padx=34, pady=(0, 12))
+        cw = W - 68
+        round_rect(cc, 1, 1, cw - 1, 137, 18, fill=CARD, outline=LINE)
+        cc.create_text(cw // 2, 24, text="SITZUNGSCODE", fill=ACC2, font=ui_font(9, "bold"))
+        self._codec = cc
+        self.code_lbl = tk.Label(cc, text="– – – – – –", bg=CARD, fg=FG, font=ui_font(40, "bold"))
+        cc.create_window(cw // 2, 70, window=self.code_lbl)
+        self.copy_btn = tk.Button(cc, text="Code kopieren", command=self._copy_code, bg=PANEL, fg=FG,
+                                  activebackground="#2A3150", relief="flat", padx=14, pady=5,
+                                  font=ui_font(10, "bold"), cursor="hand2", bd=0)
+        cc.create_window(cw // 2, 112, window=self.copy_btn)
         # Status
-        st = tk.Frame(pad, bg=BG); st.pack(padx=34, pady=(2, 4))
-        self.status_dot = tk.Label(st, text="●", bg=BG, fg="#F5B14C", font=tkfont.Font(size=11)); self.status_dot.pack(side="left", padx=(0, 7))
-        self.status_lbl = tk.Label(st, text="Bereit – warte auf Verbindung …", bg=BG, fg=MUT, font=tkfont.Font(size=10)); self.status_lbl.pack(side="left")
+        st = tk.Frame(pad, bg=BG); st.pack(padx=34, pady=(2, 6))
+        self.status_dot = tk.Label(st, text="●", bg=BG, fg="#F5B14C", font=ui_font(11)); self.status_dot.pack(side="left", padx=(0, 7))
+        self.status_lbl = tk.Label(st, text="Bereit – warte auf Verbindung …", bg=BG, fg=MUT, font=ui_font(10)); self.status_lbl.pack(side="left")
         tk.Label(pad, text="Niemand sieht deinen Bildschirm, bevor du zustimmst.\nDieses Fenster kannst du jederzeit schließen.",
-                 bg=BG, fg=MUT, font=tkfont.Font(size=9), justify="center").pack(padx=34, pady=(10, 4))
-        tk.Label(pad, text="Ende-zu-Ende verschlüsselt · " + BASE_URL.replace("https://", ""),
-                 bg=BG, fg="#5A627B", font=tkfont.Font(size=8)).pack(pady=(0, 20))
+                 bg=BG, fg=MUT, font=ui_font(9), justify="center").pack(padx=34, pady=(8, 6))
+        tk.Label(pad, text="🔒 Ende-zu-Ende verschlüsselt · " + BASE_URL.replace("https://", ""),
+                 bg=BG, fg=FAINT, font=ui_font(8)).pack(pady=(0, 18))
         self._center(w, 3)
         w.attributes("-topmost", True); w.deiconify(); w.attributes("-topmost", False)
 
@@ -390,12 +452,12 @@ class UI:
     def ask_consent(self, who, timeout_s, result):
         dlg = tk.Toplevel(self.root); dlg.title("Fernwartungs-Anfrage"); dlg.configure(bg=BG); dlg.resizable(False, False)
         _set_icon(dlg); dlg.attributes("-topmost", True)
-        tk.Label(dlg, text="🔒  Fernwartungs-Anfrage", bg=BG, fg=FG, font=tkfont.Font(size=15, weight="bold")).pack(padx=36, pady=(26, 8))
+        gradient_header(dlg, 400, "  🔒  Fernwartungs-Anfrage", height=56).pack()
         tk.Label(dlg, text="%s\nmöchte deinen Bildschirm sehen und steuern." % who, bg=BG, fg=FG,
-                 font=tkfont.Font(size=12), justify="center").pack(padx=36, pady=(0, 4))
+                 font=ui_font(12), justify="center").pack(padx=36, pady=(18, 4))
         tk.Label(dlg, text="Nur zustimmen, wenn du diese Hilfe gerade erwartest.", bg=BG, fg=MUT,
-                 font=tkfont.Font(size=9)).pack(padx=36, pady=(0, 12))
-        countdown = tk.Label(dlg, text="", bg=BG, fg=MUT, font=tkfont.Font(size=9)); countdown.pack()
+                 font=ui_font(9)).pack(padx=36, pady=(0, 12))
+        countdown = tk.Label(dlg, text="", bg=BG, fg=MUT, font=ui_font(9)); countdown.pack()
         btns = tk.Frame(dlg, bg=BG); btns.pack(padx=36, pady=(10, 24))
 
         def answer(ok):
@@ -405,10 +467,10 @@ class UI:
             except Exception:
                 pass
 
-        tk.Button(btns, text="Ablehnen", command=lambda: answer(False), bg="#2A2F45", fg=FG, activebackground="#3A4160",
-                  relief="flat", padx=20, pady=9, font=tkfont.Font(size=11, weight="bold")).pack(side="left", padx=9)
+        tk.Button(btns, text="Ablehnen", command=lambda: answer(False), bg=PANEL, fg=FG, activebackground="#2A3150",
+                  relief="flat", padx=22, pady=10, font=ui_font(11, "bold"), cursor="hand2", bd=0).pack(side="left", padx=9)
         tk.Button(btns, text="Zustimmen", command=lambda: answer(True), bg=OK, fg="#06281C", activebackground="#57e0a6",
-                  relief="flat", padx=20, pady=9, font=tkfont.Font(size=11, weight="bold")).pack(side="left", padx=9)
+                  relief="flat", padx=22, pady=10, font=ui_font(11, "bold"), cursor="hand2", bd=0).pack(side="left", padx=9)
         dlg.protocol("WM_DELETE_WINDOW", lambda: answer(False))
         self._center(dlg, 3)
         state = {"left": int(timeout_s)}
@@ -431,11 +493,11 @@ class UI:
         except Exception:
             pass
         frm = tk.Frame(b, bg=RED); frm.pack(fill="both", expand=True, padx=14, pady=7)
-        tk.Label(frm, text="●", bg=RED, fg="#FFFFFF", font=tkfont.Font(size=12)).pack(side="left", padx=(2, 8))
+        tk.Label(frm, text="●", bg=RED, fg="#FFFFFF", font=ui_font(12)).pack(side="left", padx=(2, 8))
         tk.Label(frm, text="Fernwartung aktiv – %s sieht und steuert diesen Bildschirm" % who,
-                 bg=RED, fg="#FFFFFF", font=tkfont.Font(size=10, weight="bold")).pack(side="left")
+                 bg=RED, fg="#FFFFFF", font=ui_font(10, "bold")).pack(side="left")
         tk.Button(frm, text="Trennen", command=on_disconnect, bg="#FFFFFF", fg=RED, relief="flat",
-                  padx=14, pady=3, font=tkfont.Font(size=10, weight="bold")).pack(side="left", padx=14)
+                  padx=14, pady=3, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="left", padx=14)
         b.update_idletasks()
         b.geometry("+%d+%d" % ((b.winfo_screenwidth() - b.winfo_width()) // 2, 8))
         self._pulse(b, 0)
@@ -463,17 +525,18 @@ class UI:
             self.chat.deiconify(); return
         w = self.chat = tk.Toplevel(self.root); w.title("Chat – Fernwartung"); w.configure(bg=BG)
         _set_icon(w)
-        self.chat_log = tk.Text(w, width=42, height=14, bg=CARD, fg=FG, relief="flat", wrap="word", state="disabled",
-                                font=tkfont.Font(size=10)); self.chat_log.pack(padx=12, pady=(12, 6))
+        gradient_header(w, 360, "  💬  Chat", height=48).pack()
+        self.chat_log = tk.Text(w, width=42, height=13, bg=CARD, fg=FG, relief="flat", wrap="word", state="disabled",
+                                font=ui_font(10), padx=10, pady=8); self.chat_log.pack(padx=12, pady=(12, 6))
         row = tk.Frame(w, bg=BG); row.pack(fill="x", padx=12, pady=(0, 12))
-        ent = tk.Entry(row, bg="#2A2F45", fg=FG, relief="flat", insertbackground=FG, font=tkfont.Font(size=11)); ent.pack(side="left", fill="x", expand=True, ipady=5)
+        ent = tk.Entry(row, bg=PANEL, fg=FG, relief="flat", insertbackground=FG, font=ui_font(11)); ent.pack(side="left", fill="x", expand=True, ipady=6)
         def go(_=None):
             t = ent.get().strip()
             if t:
                 on_send(t); self.add_chat(t, True); ent.delete(0, "end")
         ent.bind("<Return>", go)
-        tk.Button(row, text="Senden", command=go, bg=ACC2, fg="#06281C", relief="flat",
-                  font=tkfont.Font(size=10, weight="bold")).pack(side="left", padx=(8, 0))
+        tk.Button(row, text="Senden", command=go, bg=ACC, fg="#0C0A26", relief="flat",
+                  font=ui_font(10, "bold"), cursor="hand2", bd=0, padx=12).pack(side="left", padx=(8, 0))
         w.protocol("WM_DELETE_WINDOW", w.withdraw)
         self._center(w, 2)
 
@@ -490,26 +553,33 @@ class UI:
 
     # ---- Status-Fenster der Vollversion (Host) ----
     def show_host(self, name, ident, on_close, on_password):
+        W = 420
         w = self.main = tk.Toplevel(self.root); w.title(APP_NAME + " – Vollversion"); w.configure(bg=BG); w.resizable(False, False)
         _set_icon(w); w.protocol("WM_DELETE_WINDOW", on_close)
-        tk.Label(w, text="🖥  " + BRAND + " · Fernwartung", bg=BG, fg=ACC2, font=tkfont.Font(size=13, weight="bold")).pack(padx=34, pady=(24, 2))
-        tk.Label(w, text="Dieses Gerät ist bereit für eingehende Verbindungen.", bg=BG, fg=FG, font=tkfont.Font(size=12)).pack(padx=34, pady=(6, 2))
-        card = tk.Frame(w, bg=CARD); card.pack(padx=34, pady=12, ipadx=16, ipady=12)
-        tk.Label(card, text="DIESES GERÄT", bg=CARD, fg=MUT, font=tkfont.Font(size=9, weight="bold")).pack(pady=(4, 0))
-        tk.Label(card, text=name, bg=CARD, fg=FG, font=tkfont.Font(size=18, weight="bold")).pack()
-        tk.Label(card, text="ID  " + ident, bg=CARD, fg=ACC2, font=tkfont.Font(size=11)).pack(pady=(2, 6))
-        self.host_status = tk.Label(w, text="● Bereit", bg=BG, fg=OK, font=tkfont.Font(size=10)); self.host_status.pack()
-        tk.Button(w, text="Passwort für Zugriff festlegen …", command=on_password, bg="#2A3150", fg=FG, relief="flat",
-                  padx=12, pady=6, font=tkfont.Font(size=10, weight="bold")).pack(pady=(10, 4))
+        pad = tk.Frame(w, bg=BG); pad.pack()
+        gradient_header(pad, W, "  " + BRAND, "Fernwartung · Vollversion").pack()
+        tk.Label(pad, text="Dieses Gerät ist bereit für eingehende Verbindungen.", bg=BG, fg=FG,
+                 font=ui_font(12)).pack(padx=34, pady=(18, 10))
+        # Geräte-Karte (abgerundet)
+        cw = W - 68
+        cc = tk.Canvas(pad, width=cw, height=118, bg=BG, highlightthickness=0, bd=0); cc.pack(padx=34, pady=(0, 10))
+        round_rect(cc, 1, 1, cw - 1, 117, 18, fill=CARD, outline=LINE)
+        cc.create_text(cw // 2, 22, text="DIESES GERÄT", fill=ACC2, font=ui_font(9, "bold"))
+        cc.create_text(cw // 2, 52, text=name, fill=FG, font=ui_font(18, "bold"))
+        cc.create_text(cw // 2, 86, text="ID  " + ident, fill=ACC2, font=ui_font(11))
+        self.host_status = tk.Label(pad, text="● Bereit", bg=BG, fg=OK, font=ui_font(10)); self.host_status.pack()
+        tk.Button(pad, text="Passwort für Zugriff festlegen …", command=on_password, bg=PANEL, fg=FG, relief="flat",
+                  padx=14, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(pady=(10, 4))
         # Update-Hinweis (zunächst versteckt, erscheint wenn eine neue Version da ist)
-        self.update_bar = tk.Frame(w, bg="#243A2C")
-        self._update_lbl = tk.Label(self.update_bar, text="", bg="#243A2C", fg="#8CE0B4",
-                                    font=tkfont.Font(size=10, weight="bold")); self._update_lbl.pack(side="left", padx=(12, 8), pady=8)
-        self._update_btn = tk.Button(self.update_bar, text="Herunterladen", bg="#36C98E", fg="#06250F", relief="flat",
-                                     padx=12, pady=4, font=tkfont.Font(size=9, weight="bold")); self._update_btn.pack(side="left", padx=(0, 12), pady=8)
-        tk.Label(w, text="Verbinden über das Intranet → Fernwartung. Jede Sitzung zeigt ein Banner und wird protokolliert.",
-                 bg=BG, fg=MUT, font=tkfont.Font(size=9), wraplength=360, justify="center").pack(padx=34, pady=(4, 20))
-        tk.Label(w, text="Version " + AGENT_VERSION, bg=BG, fg="#5A627B", font=tkfont.Font(size=8)).pack(pady=(0, 10))
+        self.update_bar = tk.Frame(pad, bg="#15321F")
+        self._update_lbl = tk.Label(self.update_bar, text="", bg="#15321F", fg="#8CE0B4",
+                                    font=ui_font(10, "bold")); self._update_lbl.pack(side="left", padx=(14, 8), pady=9)
+        self._update_btn = tk.Button(self.update_bar, text="Herunterladen", bg=OK, fg="#06250F", relief="flat",
+                                     padx=12, pady=4, font=ui_font(9, "bold"), cursor="hand2", bd=0); self._update_btn.pack(side="left", padx=(0, 12), pady=9)
+        tk.Label(pad, text="Verbinden über das Intranet → Fernwartung. Jede Sitzung zeigt ein Banner und wird protokolliert.",
+                 bg=BG, fg=MUT, font=ui_font(9), wraplength=360, justify="center").pack(padx=34, pady=(4, 14))
+        tk.Label(pad, text="🔒 Ende-zu-Ende verschlüsselt · Version " + AGENT_VERSION, bg=BG, fg=FAINT,
+                 font=ui_font(8)).pack(pady=(0, 16))
         self._center(w, 3); w.deiconify()
 
     def show_update(self, ver, page):

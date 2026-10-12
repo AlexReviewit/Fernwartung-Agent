@@ -1,5 +1,5 @@
 {
-  "version": "2026.10.12.1",
+  "version": "2026.10.12.2",
   "page": "https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest",
-  "notes": "Automatisches Update, neues Design, Sicherheits-Verbesserungen."
+  "notes": "Neues Design im Look des Intranets (Verlaufs-Kopfzeile, abgerundete Karten, klare Schrift), automatisches Update in der Vollversion, Passwort-Schutz gegen Ausprobieren."
 }
