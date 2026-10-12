@@ -52,7 +52,23 @@ APP_NAME = "Alex Reviewit Fernwartung"
 BRAND = "Alex Reviewit"
 FPS = int(os.environ.get("IR_REMOTE_FPS", "12"))
 POLL_SECS = 2.0
-AGENT_VERSION = "2026.10.12.2"   # wird beim automatischen Update verglichen
+
+
+def _bundled_build():
+    """Fortlaufende Versionsnummer (1, 2, 3 …). Wird beim Bauen in build.txt
+    geschrieben und ins Programm gepackt. Beim lokalen Entwickeln fehlt sie."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    try:
+        with open(os.path.join(base, "build.txt"), "r", encoding="utf-8") as f:
+            v = f.read().strip()
+            if v:
+                return v
+    except Exception:
+        pass
+    return "0"
+
+
+AGENT_VERSION = _bundled_build()   # wird beim automatischen Update verglichen
 RELEASE_BASE = os.environ.get("IR_RELEASE_BASE", "https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest/download")
 UPDATE_EVERY = 6 * 3600          # alle 6 Stunden auf neue Version prüfen
 
@@ -111,7 +127,9 @@ def os_label():
 # ---------------------------------------------------------------------------
 VERSION_URL = os.environ.get(
     "IR_VERSION_URL",
-    "https://raw.githubusercontent.com/AlexanderEdler/Fernwartung-Agent/main/remote-agent/version.json",
+    # Datei liegt dem neuesten Release bei und wird bei jedem Bau automatisch
+    # aktualisiert – so muss nie etwas von Hand geändert werden.
+    "https://github.com/AlexanderEdler/Fernwartung-Agent/releases/latest/download/version.json",
 )
 
 
@@ -578,7 +596,8 @@ class UI:
                                      padx=12, pady=4, font=ui_font(9, "bold"), cursor="hand2", bd=0); self._update_btn.pack(side="left", padx=(0, 12), pady=9)
         tk.Label(pad, text="Verbinden über das Intranet → Fernwartung. Jede Sitzung zeigt ein Banner und wird protokolliert.",
                  bg=BG, fg=MUT, font=ui_font(9), wraplength=360, justify="center").pack(padx=34, pady=(4, 14))
-        tk.Label(pad, text="🔒 Ende-zu-Ende verschlüsselt · Version " + AGENT_VERSION, bg=BG, fg=FAINT,
+        _vshow = ("Version " + AGENT_VERSION) if AGENT_VERSION != "0" else "Entwicklungs-Version"
+        tk.Label(pad, text="🔒 Ende-zu-Ende verschlüsselt · " + _vshow, bg=BG, fg=FAINT,
                  font=ui_font(8)).pack(pady=(0, 16))
         self._center(w, 3); w.deiconify()
 
