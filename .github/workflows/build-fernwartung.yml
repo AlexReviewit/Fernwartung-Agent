@@ -83,7 +83,11 @@ jobs:
     env:
       NUM: ${{ needs.prep.outputs.num }}
     steps:
+      # Voller Verlauf + Tags, damit wir die Aenderungen seit der letzten Version lesen koennen.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/download-artifact@v4
         with: { path: out }
       - name: version.json fuer das automatische Update erzeugen
@@ -95,22 +99,63 @@ jobs:
           json.dump(d, open('out/version.json', 'w'), ensure_ascii=False, indent=2)
           print('version.json ->', d)
           PY
+      # NEU: Release-Text aus den echten Aenderungen seit der letzten Version bauen.
+      - name: Changelog der Aenderungen erzeugen
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          PREV=$((NUM-1))
+          if git rev-parse "v$PREV" >/dev/null 2>&1; then
+            RANGE="v$PREV..HEAD"
+            COMPARE="https://github.com/$REPO/compare/v$PREV...v$NUM"
+          else
+            RANGE="HEAD"
+            COMPARE="https://github.com/$REPO/commits/v$NUM"
+          fi
+          # Aenderungen am Fernwartungs-Programm (ohne Merge-Commits). Fallback: alle Aenderungen.
+          CHANGES=$(git log --no-merges --pretty='- %s' $RANGE -- remote-agent 2>/dev/null)
+          [ -z "$CHANGES" ] && CHANGES=$(git log --no-merges --pretty='- %s' $RANGE 2>/dev/null)
+          [ -z "$CHANGES" ] && CHANGES="- Kleinere Verbesserungen und Fehlerbehebungen"
+
+          # Text fuer die nummerierte Version (bleibt dauerhaft erhalten)
+          {
+            echo "Fernwartung **Version $NUM** – Schnellhilfe (QuickSupport) und Vollversion (Host) fuer Windows und macOS."
+            echo ""
+            echo "### 🔄 Was ist neu"
+            echo "$CHANGES"
+            echo ""
+            echo "**Full Changelog:** $COMPARE"
+            echo ""
+            echo "---"
+            echo "👉 Zum Herunterladen am besten die **[⭐ Neueste Version](https://github.com/$REPO/releases/latest)** nutzen – die Vollversion aktualisiert sich dann auch selbst."
+          } > notes-version.md
+
+          # Text fuer "Neueste Version" (feste Download-Links + was neu ist)
+          {
+            echo "Diese Seite zeigt **immer den aktuellsten Build** (derzeit **Version $NUM**)."
+            echo "Die Download-Links hier bleiben gleich – praktisch fuer die Knoepfe im Intranet."
+            echo ""
+            echo "### ⬇️ Download"
+            echo "| | Windows | macOS |"
+            echo "|---|---|---|"
+            echo "| ⚡ Schnellhilfe | [.exe](https://github.com/$REPO/releases/latest/download/AlexReviewit-Schnellhilfe.exe) | [.pkg](https://github.com/$REPO/releases/latest/download/AlexReviewit-Schnellhilfe.pkg) |"
+            echo "| 💻 Vollversion | [Installer](https://github.com/$REPO/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe) | [Installer](https://github.com/$REPO/releases/latest/download/AlexReviewit-Fernwartung.pkg) |"
+            echo ""
+            echo "### 🔄 Was ist neu in Version $NUM"
+            echo "$CHANGES"
+            echo ""
+            echo "**Full Changelog:** $COMPARE"
+            echo ""
+            echo "🔒 Ende-zu-Ende verschluesselt · Zugriff nur mit Zustimmung · jede Sitzung wird protokolliert."
+          } > notes-latest.md
+
+          echo "----- notes-version.md -----"; cat notes-version.md
       - name: Neueste Version veroeffentlichen (feste Download-Links)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: ⭐ Neueste Version
-          body: |
-            Diese Seite zeigt **immer den aktuellsten Build** (derzeit **Version ${{ env.NUM }}**).
-            Die Download-Links hier bleiben gleich – praktisch fuer die Knoepfe im Intranet.
-
-            ### ⬇️ Download
-            | | Windows | macOS |
-            |---|---|---|
-            | ⚡ Schnellhilfe | [.exe](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.exe) | [.pkg](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.pkg) |
-            | 💻 Vollversion | [Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe) | [Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung.pkg) |
-
-            🔒 Ende-zu-Ende verschluesselt · Zugriff nur mit Zustimmung · jede Sitzung wird protokolliert.
+          body_path: notes-latest.md
           make_latest: true
           files: out/**/*
       - name: Neue nummerierte Version veroeffentlichen (bleibt dauerhaft)
@@ -119,10 +164,5 @@ jobs:
           tag_name: v${{ env.NUM }}
           name: Version ${{ env.NUM }}
           make_latest: false
-          body: |
-            Fernwartung **Version ${{ env.NUM }}** – Schnellhilfe (QuickSupport) und Vollversion (Host)
-            fuer Windows und macOS. Diese Version bleibt dauerhaft erhalten.
-
-            👉 Zum Herunterladen am besten die **[⭐ Neueste Version](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest)** nutzen –
-            die Vollversion aktualisiert sich dann auch selbst.
+          body_path: notes-version.md
           files: out/**/*
