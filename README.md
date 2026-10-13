@@ -1,128 +1,129 @@
 <div align="center">
 
-# 🖥️ Alex Reviewit – Fernwartung
+![Alex Reviewit – Fernwartung](docs/banner.png)
 
-**Das eigene Fernwartungs-Tool von Alex Reviewit – im Stil von TeamViewer & AnyDesk, nur einfacher.**
-Bildschirme sehen und Maus/Tastatur steuern, direkt im Browser – Ende‑zu‑Ende verschlüsselt.
+Bildschirme sehen und Maus/Tastatur steuern – **direkt im Browser, Ende‑zu‑Ende verschlüsselt.**
+Das eigene Fernwartungs‑Tool für das Intranet von Alex Reviewit.
 
-[![Build](https://github.com/AlexReviewit/Fernwartung-Agent/actions/workflows/build-fernwartung.yml/badge.svg)](https://github.com/AlexReviewit/Fernwartung-Agent/actions/workflows/build-fernwartung.yml)
-[![Neueste Version](https://img.shields.io/github/v/release/AlexReviewit/Fernwartung-Agent?label=neueste%20Version&sort=semver&color=5DADFF)](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest)
-![Windows & macOS](https://img.shields.io/badge/f%C3%BCr-Windows%20%26%20macOS-8E7CFF)
-![Verschlüsselt](https://img.shields.io/badge/🔒-Ende--zu--Ende%20verschlüsselt-5BD6A0)
+[![Neueste Version](https://img.shields.io/github/v/release/AlexReviewit/Fernwartung-Agent?label=Version&sort=semver&color=8E7CFF)](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest)
+&nbsp;[![Build](https://github.com/AlexReviewit/Fernwartung-Agent/actions/workflows/build-fernwartung.yml/badge.svg)](https://github.com/AlexReviewit/Fernwartung-Agent/actions/workflows/build-fernwartung.yml)
+&nbsp;![Windows & macOS](https://img.shields.io/badge/Windows%20%26%20macOS-5DADFF)
+
+**[⬇️ Download](#-download)** · **[🚀 Schnellstart](#-schnellstart)** · **[📘 Änderungen](CHANGELOG.md)**
 
 </div>
 
----
+<br>
 
-## Was ist das?
+## ⬇️ Download
 
-Ein kleines Programm, mit dem sich berechtigte Personen aus dem Intranet
-**[intranet.alexreviewit.at](https://intranet.alexreviewit.at/fernwartung)** mit einem
-Computer verbinden können – zum Zusehen oder zur vollen Steuerung. Die Verbindung läuft
-**direkt** zwischen Techniker und Gerät und ist dabei **verschlüsselt**; das Intranet
-vermittelt nur den Verbindungsaufbau.
+> 💡 Am einfachsten direkt im Intranet unter **Fernwartung** – dort stehen die passenden Knöpfe.
 
-> Es verbindet sich **nie von selbst**. Zugriff gibt es nur nach Zustimmung am Gerät bzw.
-> nach der Regel, die du im Programm einstellst – und während jeder Sitzung läuft ein
-> deutlich sichtbares Hinweis‑Banner, das jederzeit trennen kann.
+|  | Windows | macOS |
+|:--|:--:|:--:|
+| ⚡ **Schnellhilfe** – spontane Hilfe, keine Installation | **[.exe](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.exe)** | **[.pkg](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.pkg)** |
+| 💻 **Vollversion** – eigene Geräte dauerhaft | **[Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe)** | **[Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung.pkg)** |
 
-## Zwei Programme – für zwei Situationen
+<br>
 
-| | ⚡ **Schnellhilfe** | 💻 **Vollversion** |
-|---|---|---|
-| Wofür? | Spontane Hilfe für jemanden | Eigene Geräte & Server dauerhaft erreichbar |
-| Installation | Keine – einfach starten | Richtiges Setup (wie bei Firefox) |
-| Verbinden über | 6‑stelligen Code vorlesen | Geräte‑ID (+ Passwort) |
-| Zugriff | Nur mit Zustimmung am Gerät | Regel frei wählbar (siehe unten) |
-| Vorbild | TeamViewer QuickSupport | TeamViewer/AnyDesk Host |
+## 🚀 Schnellstart
 
-## Download
+**Spontane Hilfe** → *Schnellhilfe* starten, den 6‑stelligen Code vorlesen, fertig.
 
-> **Für die meisten:** Die Programme bekommst du am einfachsten direkt im Intranet unter
-> **Fernwartung** – dort sind die passenden Knöpfe für Windows und Mac.
+**Eigenes Gerät dauerhaft** → *Vollversion*‑Installer ausführen → beim ersten Start den
+**Einrichtungs‑Code** aus dem Intranet eingeben *(kein Passwort nötig)* → im Programm wählen,
+**wer zugreifen darf**.
 
-Oder direkt hier (immer die neueste Version):
+<br>
 
-| | Windows | macOS |
-|---|---|---|
-| ⚡ Schnellhilfe | [Herunterladen](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.exe) | [Herunterladen](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.pkg) |
-| 💻 Vollversion | [Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe) | [Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung.pkg) |
+## ✨ Auf einen Blick
 
-Alle Versionen (auch ältere) findest du unter **[Releases](https://github.com/AlexReviewit/Fernwartung-Agent/releases)**.
-Was sich geändert hat, steht in **[CHANGELOG.md](CHANGELOG.md)**.
+- 🔒 **Ende‑zu‑Ende verschlüsselt** – Bild & Steuerung laufen direkt zwischen Browser und Gerät
+- ✅ Zugriff nur nach **Zustimmung** oder nach deiner eingestellten Regel
+- 🆔 **Geräte‑ID + Passwort** wie bei TeamViewer · feste oder Einmal‑Passwörter
+- 🔄 **Automatisches Update** mit einem Klick
+- 📝 Jede Sitzung wird **protokolliert**
 
-## Vollversion einrichten
+<br>
 
-1. **Installer** herunterladen und ausführen → das Programm landet unter „Programme“ und
-   startet auf Wunsch automatisch mit.
-2. Beim ersten Start den **6‑stelligen Einrichtungs‑Code** aus dem Intranet eingeben
-   (Fernwartung → „Gerät hinzufügen“). **Ein Passwort ist dabei nicht nötig.**
-3. Im Programm einstellen, **wer zugreifen darf**:
+<details>
+<summary><b>🔑 Zugriffsregeln der Vollversion</b></summary>
+
+<br>
 
 | Regel | Bedeutung |
-|---|---|
+|:--|:--|
 | **Fragen** | Bei jeder Verbindung wird am Gerät zuerst gefragt |
-| **Passwort – fest** | Zugriff nur mit deinem festen Passwort, ohne Nachfrage |
+| **Passwort – fest** | Nur mit deinem festen Passwort, ohne Nachfrage |
 | **Passwort – einmal** | Zufalls‑Passwort, wird angezeigt und wechselt nach jeder Sitzung |
 | **Automatisch** | Ohne Nachfrage – nur für eigene, sichere Geräte |
 | **Gesperrt** | Keine eingehenden Verbindungen |
 
-## Funktionen in der Sitzung
+Das Programmfenster zeigt außerdem die große **Geräte‑ID** (zum Kopieren), den **Live‑Status**
+und den **letzten Zugriff**.
 
-- 🎛️ Volle Steuerung oder **„Nur zusehen“**
-- 🖥️ Mehrere Bildschirme umschalten
-- 📁 Dateien senden · 📋 Zwischenablage · ⌨️ Strg+Alt+Entf
-- 💬 Chat mit Zeitstempel und Absender
-
-## Automatische Updates
-
-Die Vollversion prüft von selbst auf neue Versionen. Ist eine da, erscheint im
-Fenster **„Version X ist verfügbar“** mit **„Jetzt aktualisieren“** – das Programm
-**lädt den Installer selbst herunter, startet ihn und schließt sich** (Ein‑Klick).
-Mit **„Nach Updates suchen“** kann man auch manuell prüfen.
-
-> Damit das Update (und die Downloads) für alle funktionieren, muss dieses
-> Projekt **öffentlich** sein. Einmal den neuen Installer von Hand holen, danach
-> aktualisiert sich die Vollversion selbst.
-
-## Sicherheit
-
-- 🔒 **Ende‑zu‑Ende verschlüsselt** (WebRTC / DTLS‑SRTP) – direkt zwischen Techniker und Gerät.
-- ✅ Zugriff nur nach **Zustimmung** bzw. nach deiner eingestellten Regel.
-- 🔑 Zugriffs‑Passwort gegen Ausprobieren geschützt (Sperre nach mehreren Fehlversuchen).
-- 📝 Jede Sitzung wird **protokolliert** (Wer? Wann? Welches Gerät?).
-- 🙈 In diesem Projekt liegen **keine Passwörter oder Schlüssel** – die liegen sicher in Cloudflare.
-
----
+</details>
 
 <details>
-<summary><b>Für Entwickler / zum Selberbauen</b></summary>
+<summary><b>🎛️ Funktionen während einer Sitzung</b></summary>
 
-### Automatisch in der GitHub‑Cloud (empfohlen)
-Jeder Push nach `main`, der `remote-agent/` ändert, baut automatisch und veröffentlicht:
+<br>
 
-- **`Neueste Version`** – rollt immer auf den aktuellsten Build (feste Download‑Links).
-- **`Version N`** – eine neue, fortlaufend nummerierte Version (1, 2, 3 …). Alte bleiben erhalten.
+- Volle Steuerung oder **„Nur zusehen“**
+- Mehrere Bildschirme umschalten
+- Dateien senden · Zwischenablage · Strg + Alt + Entf
+- Chat mit Zeitstempel und Absender
 
-Die Versionsnummer wird beim Bauen ins Programm geschrieben (`build.txt`), damit das
-automatische Update sie vergleichen kann (`remote-agent/version.json` als Release‑Anhang).
+</details>
 
-### Lokal bauen
-```text
-remote-agent/BUILD-Windows.cmd      (Windows)
-remote-agent/BUILD-Mac.command      (macOS)
-```
-Details: `remote-agent/BAUEN-LIES-MICH.txt`.
+<details>
+<summary><b>🔄 Automatische Updates</b></summary>
 
-### Aufbau
+<br>
+
+Die Vollversion prüft von selbst auf neue Versionen. Ist eine da, erscheint
+**„Version X ist verfügbar“** mit **„Jetzt aktualisieren“** – das Programm lädt den Installer
+selbst herunter, startet ihn und schließt sich. Mit **„Nach Updates suchen“** geht es auch manuell.
+
+> Damit Updates und Downloads für alle funktionieren, muss dieses Projekt **öffentlich** sein.
+
+</details>
+
+<details>
+<summary><b>🔒 Sicherheit</b></summary>
+
+<br>
+
+- Verschlüsselt per **WebRTC / DTLS‑SRTP**, direkt zwischen Techniker und Gerät.
+- Im Passwort‑Modus prüft der Server das Passwort, **bevor** eine Sitzung entsteht
+  (mit Sperre nach mehreren Fehlversuchen).
+- Zugriff auf die Seite nur mit **Microsoft‑Anmeldung** + Berechtigung „Fernsteuerung“.
+- In diesem Projekt liegen **keine Passwörter oder Schlüssel** – die liegen sicher in Cloudflare.
+
+</details>
+
+<details>
+<summary><b>🛠️ Für Entwickler</b></summary>
+
+<br>
+
+Jeder Push nach `main`, der `remote-agent/` ändert, baut automatisch und veröffentlicht zwei
+Release‑Einträge: **„⭐ Neueste Version“** (feste Download‑Links) und **„Version N“**
+(fortlaufend nummeriert, 1, 2, 3 … – alte bleiben erhalten). Die Versionsnummer wird beim
+Bauen ins Programm geschrieben, damit das Auto‑Update sie vergleichen kann.
+
 | Datei | Zweck |
-|---|---|
-| `remote-agent/agent.py` | Die ganze Logik (Signaling, Bildschirm, Steuerung, Oberfläche) |
-| `remote-agent/schnellhilfe.py` | Einstieg Schnellhilfe (QuickSupport) |
-| `remote-agent/vollversion.py` | Einstieg Vollversion (Host) |
+|:--|:--|
+| `remote-agent/agent.py` | Die ganze Logik (Signaling, Bildschirm, Steuerung, Fenster, Update) |
+| `remote-agent/schnellhilfe.py` · `vollversion.py` | Einstiegspunkte |
 | `remote-agent/Fernwartung.iss` | Windows‑Installer (Inno Setup) |
 | `.github/workflows/build-fernwartung.yml` | Baut & veröffentlicht automatisch |
 
+Lokal bauen: `remote-agent/BUILD-Windows.cmd` bzw. `BUILD-Mac.command`
+(Details in `remote-agent/BAUEN-LIES-MICH.txt`).
+
 </details>
+
+<br>
 
 <div align="center"><sub>© Alex Reviewit · Fernwartung für intranet.alexreviewit.at</sub></div>
