@@ -33,6 +33,11 @@ jobs:
   windows:
     needs: prep
     runs-on: windows-latest
+    # Code-Signing-Zertifikat (optional). Liegen diese Secrets vor, werden die
+    # Programme signiert; fehlen sie, baut alles ganz normal unsigniert weiter.
+    env:
+      WIN_CERT_PFX_BASE64: ${{ secrets.WIN_CERT_PFX_BASE64 }}
+      WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
     defaults: { run: { working-directory: remote-agent } }
     steps:
       - uses: actions/checkout@v4
@@ -47,12 +52,40 @@ jobs:
       # Einzelne, sich selbst entpackende .exe-Dateien (--onefile) sind der haeufigste
       # Grund fuer Fehlalarme von Microsoft Defender – der Ordner-Build vermeidet das.
       - run: pyinstaller --noconfirm --clean --onedir --noconsole --version-file version.txt --add-data "assets;assets" --add-data "build.txt;." --add-data "LIZENZ.txt;." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-all cryptography --collect-all cffi --collect-all mss --collect-all numpy --collect-all pyee --collect-all google_crc32c --collect-submodules pynput --hidden-import pystray._win32 --icon assets/icon.ico --name "AlexReviewit-Fernwartung" vollversion.py
+      # Programme signieren – NUR wenn ein Zertifikat als Secret hinterlegt ist.
+      # Signiert wird VOR dem Installer, damit die installierten .exe echt signiert
+      # sind; der Installer selbst wird danach signiert.
+      - name: Programme signieren (falls Zertifikat vorhanden)
+        if: env.WIN_CERT_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WIN_CERT_PFX_BASE64))
+          $signtool = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          if (-not $signtool) { throw "signtool.exe nicht gefunden (Windows SDK)." }
+          $targets = @(
+            "dist\AlexReviewit-Schnellhilfe.exe",
+            "dist\AlexReviewit-Fernwartung\AlexReviewit-Fernwartung.exe"
+          )
+          & $signtool sign /f $pfx /p $env:WIN_CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /d "Alex Reviewit Fernwartung" $targets
+          if ($LASTEXITCODE -ne 0) { throw "Signieren der Programme fehlgeschlagen." }
+          Remove-Item $pfx -Force
       - name: Installer der Vollversion bauen (Inno Setup, wie bei Firefox)
         shell: pwsh
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
           & $iscc "Fernwartung.iss" "/DMyVersion=${{ needs.prep.outputs.num }}"
+      - name: Installer signieren (falls Zertifikat vorhanden)
+        if: env.WIN_CERT_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WIN_CERT_PFX_BASE64))
+          $signtool = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          & $signtool sign /f $pfx /p $env:WIN_CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /d "Alex Reviewit Fernwartung Setup" "dist\AlexReviewit-Fernwartung-Setup.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Signieren des Installers fehlgeschlagen." }
+          Remove-Item $pfx -Force
       - uses: actions/upload-artifact@v4
         with:
           name: Windows

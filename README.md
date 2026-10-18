@@ -124,6 +124,11 @@ selbst herunter, startet ihn und schließt sich. Mit **„Nach Updates suchen“
   als *Software developer* → *Incorrectly detected as malware* einreichen. Dauerhaft
   hilft nur ein Code‑Signing‑Zertifikat.
 
+- **Signatur (dauerhafte Lösung):** Liegen im Repo die Secrets `WIN_CERT_PFX_BASE64`
+  und `WIN_CERT_PASSWORD`, signiert der Build Programme und Installer automatisch –
+  sonst baut er unsigniert weiter. Welches Zertifikat und wie einrichten: siehe
+  [`remote-agent/CODE-SIGNING.txt`](remote-agent/CODE-SIGNING.txt).
+
 </details>
 
 <details>

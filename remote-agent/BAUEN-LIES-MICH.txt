@@ -42,6 +42,11 @@ AUFBAU (welche Datei macht was)
   • version.json       – Vorlage fuer das Update (die Nummer setzt die CI)
   • .github/workflows/build-fernwartung.yml – baut & veroeffentlicht automatisch
 
+CODE-SIGNING (gegen Defender-Fehlalarme) – EMPFOHLEN
+  Der Build signiert automatisch, sobald im Repo die Secrets
+  WIN_CERT_PFX_BASE64 und WIN_CERT_PASSWORD liegen (sonst unsigniert).
+  Welches Zertifikat kaufen und wie die Secrets anlegen: siehe CODE-SIGNING.txt.
+
 SIGNATUR / WARNUNGEN
   • Windows SmartScreen zeigt bei unsignierten Dateien "Unbekannter Herausgeber"
     (mit Code-Signing-Zertifikat behebbar, optional).

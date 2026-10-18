@@ -1,0 +1,73 @@
+CODE-SIGNING – WINDOWS (gegen Defender/SmartScreen-Warnungen)
+=============================================================
+
+WARUM
+  Die Fernwartung steuert Maus/Tastatur und überträgt den Bildschirm – genau
+  wie Schadsoftware. Ohne Signatur stuft Windows sie deshalb oft als
+  "verdächtig" ein (Fehlalarm). Eine gültige Code-Signatur mit einem auf
+  "Alex Reviewit" ausgestellten Zertifikat behebt das dauerhaft.
+
+WIE DER BUILD DAS MACHT
+  Der GitHub-Build signiert automatisch, SOBALD zwei Secrets im Repo liegen.
+  Fehlen sie, baut alles ganz normal unsigniert weiter (nichts geht kaputt).
+  Signiert werden: die Schnellhilfe-.exe, die Vollversion-.exe und der Installer
+  (jeweils mit Zeitstempel, damit die Signatur auch nach Ablauf gültig bleibt).
+
+────────────────────────────────────────────────────────────────────────
+WELCHES ZERTIFIKAT KAUFEN
+  Es gibt zwei Wege. Beide stellen das Zertifikat auf den Firmennamen
+  (Alex Reviewit / Alexander Edler) aus; dafür ist eine Identitätsprüfung nötig.
+
+  A) EMPFOHLEN HEUTE: "Azure Trusted Signing" (Microsoft), ca. 10 $/Monat.
+     + Sofortiges Vertrauen bei SmartScreen (kein langsames "Reputation sammeln").
+     + Kein USB-Stick/HSM nötig.
+     − Nutzt NICHT die unten beschriebene .pfx-Methode, sondern ein eigenes
+       Signier-Verfahren. Dann sag mir Bescheid – ich stelle den Build-Schritt
+       auf die Azure-Signierung um (statt der zwei Secrets kommen dann ein paar
+       Azure-Angaben rein). Voraussetzung: Firma/Person mind. 3 Jahre nachweisbar.
+
+  B) KLASSISCH: "OV Code Signing Certificate" als Datei (.pfx), z. B. bei
+     Sectigo, DigiCert, GlobalSign (oft über Reseller wie SSL.com günstiger),
+     ca. 200–400 €/Jahr.
+     + Funktioniert direkt mit der eingebauten .pfx-Methode (unten).
+     − SmartScreen vertraut erst nach einer Weile voll (Reputation baut sich auf).
+     Hinweis: Reine EV-Zertifikate kommen heute meist nur noch auf Hardware/HSM
+     und passen NICHT in diese einfache .pfx-Methode.
+
+────────────────────────────────────────────────────────────────────────
+WEG B EINRICHTEN (.pfx als GitHub-Secret) – einmalig
+
+  1. Zertifikat als Datei "zertifikat.pfx" mit Passwort vom Anbieter erhalten
+     (oder aus dem Windows-Zertifikatspeicher exportieren: certmgr.msc →
+     Zertifikat → Alle Aufgaben → Exportieren → "Ja, privaten Schlüssel
+     exportieren" → .pfx, Passwort setzen).
+
+  2. Die .pfx in Base64 umwandeln (eine lange Textzeile):
+       Windows (PowerShell):
+         [Convert]::ToBase64String([IO.File]::ReadAllBytes("zertifikat.pfx")) > pfx.txt
+       macOS/Linux:
+         base64 -i zertifikat.pfx -o pfx.txt
+     Den GESAMTEN Inhalt von pfx.txt kopieren.
+
+  3. In GitHub: Repo "Fernwartung-Agent" → Settings → Secrets and variables →
+     Actions → "New repository secret". ZWEI Secrets anlegen:
+       • Name: WIN_CERT_PFX_BASE64   Wert: der Base64-Text aus Schritt 2
+       • Name: WIN_CERT_PASSWORD     Wert: das Passwort der .pfx
+     (Secrets sind nicht lesbar und erscheinen nie im Build-Protokoll.)
+
+  4. Danach einen neuen Build auslösen: entweder eine kleine Änderung pushen,
+     oder GitHub → Actions → "Build Fernwartung" → "Run workflow".
+     Fertig – ab dann sind alle Downloads signiert.
+
+  Zum Prüfen: heruntergeladene .exe → Rechtsklick → Eigenschaften →
+  Reiter "Digitale Signaturen" muss "Alex Reviewit" zeigen.
+
+ABLAUF/ERNEUERUNG
+  Läuft das Zertifikat ab, neues besorgen und die beiden Secrets ersetzen.
+  Dank Zeitstempel bleiben bereits signierte, alte Dateien gültig.
+
+macOS
+  Für den Mac gilt dasselbe Prinzip mit einer Apple "Developer ID"-Signatur +
+  Notarisierung. Das ist separat und noch nicht im Cloud-Build aktiv – bei
+  Bedarf richte ich es ein (BUILD-Mac.command signiert bereits, wenn die
+  Variable CODESIGN_ID gesetzt ist).
