@@ -43,7 +43,10 @@ jobs:
         run: echo -n "${{ needs.prep.outputs.num }}" > build.txt
       - run: pip install -r requirements.txt pyinstaller
       - run: pyinstaller --noconfirm --clean --onefile --noconsole --version-file version.txt --add-data "assets;assets" --add-data "build.txt;." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-all cryptography --collect-all cffi --collect-all mss --collect-all numpy --collect-all pyee --collect-all google_crc32c --collect-submodules pynput --icon assets/icon.ico --name "AlexReviewit-Schnellhilfe" schnellhilfe.py
-      - run: pyinstaller --noconfirm --clean --onefile --noconsole --version-file version.txt --add-data "assets;assets" --add-data "build.txt;." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-all cryptography --collect-all cffi --collect-all mss --collect-all numpy --collect-all pyee --collect-all google_crc32c --collect-submodules pynput --icon assets/icon.ico --name "AlexReviewit-Fernwartung" vollversion.py
+      # Vollversion als ORDNER-Build (--onedir): Der Installer packt den Ordner ein.
+      # Einzelne, sich selbst entpackende .exe-Dateien (--onefile) sind der haeufigste
+      # Grund fuer Fehlalarme von Microsoft Defender – der Ordner-Build vermeidet das.
+      - run: pyinstaller --noconfirm --clean --onedir --noconsole --version-file version.txt --add-data "assets;assets" --add-data "build.txt;." --add-data "LIZENZ.txt;." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-all cryptography --collect-all cffi --collect-all mss --collect-all numpy --collect-all pyee --collect-all google_crc32c --collect-submodules pynput --hidden-import pystray._win32 --icon assets/icon.ico --name "AlexReviewit-Fernwartung" vollversion.py
       - name: Installer der Vollversion bauen (Inno Setup, wie bei Firefox)
         shell: pwsh
         run: |
@@ -69,7 +72,7 @@ jobs:
         run: echo -n "${{ needs.prep.outputs.num }}" > build.txt
       - run: pip install -r requirements.txt pyinstaller
       - run: pyinstaller --noconfirm --clean --windowed --icon assets/icon.icns --add-data "assets:assets" --add-data "build.txt:." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-all cryptography --collect-all cffi --collect-all mss --collect-all numpy --collect-all pyee --collect-all google_crc32c --collect-submodules pynput --osx-bundle-identifier at.alexreviewit.fernwartung.quick --name "AlexReviewit-Schnellhilfe" schnellhilfe.py
-      - run: pyinstaller --noconfirm --clean --windowed --icon assets/icon.icns --add-data "assets:assets" --add-data "build.txt:." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-all cryptography --collect-all cffi --collect-all mss --collect-all numpy --collect-all pyee --collect-all google_crc32c --collect-submodules pynput --osx-bundle-identifier at.alexreviewit.fernwartung --name "AlexReviewit-Fernwartung" vollversion.py
+      - run: pyinstaller --noconfirm --clean --windowed --icon assets/icon.icns --add-data "assets:assets" --add-data "build.txt:." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-all cryptography --collect-all cffi --collect-all mss --collect-all numpy --collect-all pyee --collect-all google_crc32c --collect-submodules pynput --hidden-import pystray._darwin --hidden-import AppKit --osx-bundle-identifier at.alexreviewit.fernwartung --name "AlexReviewit-Fernwartung" vollversion.py
       - run: |
           pkgbuild --install-location /Applications --component "dist/AlexReviewit-Schnellhilfe.app" "dist/AlexReviewit-Schnellhilfe.pkg"
           pkgbuild --install-location /Applications --component "dist/AlexReviewit-Fernwartung.app" "dist/AlexReviewit-Fernwartung.pkg"

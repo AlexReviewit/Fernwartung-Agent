@@ -1,0 +1,37 @@
+﻿PROPRIETÄRE SOFTWARE-LIZENZ / PROPRIETARY SOFTWARE LICENSE
+
+Copyright © 2026 Alexander Edler (Alex Reviewit). Alle Rechte vorbehalten / All rights reserved.
+
+────────────────────────────────────────────────────────────────────────
+DEUTSCH
+
+Diese Software und der zugehörige Quellcode (die „Software") sind geistiges
+Eigentum von Alex Reviewit / Alexander Edler. Der Quellcode ist einsehbar,
+die Software ist jedoch NICHT quelloffen (kein Open Source).
+
+Ohne ausdrückliche vorherige schriftliche Genehmigung von Alex Reviewit ist es
+untersagt, die Software ganz oder in Teilen zu nutzen, zu kopieren, zu
+vervielfältigen, zu verändern, zusammenzuführen, zu veröffentlichen, zu
+verbreiten, unterzulizenzieren oder zu verkaufen.
+
+Die Software wird „wie besehen" und ohne jegliche Gewährleistung bereitgestellt.
+Soweit gesetzlich zulässig, haftet Alex Reviewit nicht für Schäden, die aus der
+Nutzung oder Nichtnutzbarkeit der Software entstehen.
+
+────────────────────────────────────────────────────────────────────────
+ENGLISH
+
+This software and its accompanying source code (the "Software") are the
+intellectual property of Alex Reviewit / Alexander Edler. The source may be
+viewed, but the Software is NOT open source.
+
+No part of the Software may be used, copied, reproduced, modified, merged,
+published, distributed, sublicensed, or sold without the express prior written
+permission of Alex Reviewit.
+
+The Software is provided "AS IS", without warranty of any kind. To the maximum
+extent permitted by law, Alex Reviewit shall not be liable for any damages
+arising from the use of, or inability to use, the Software.
+
+────────────────────────────────────────────────────────────────────────
+Kontakt / Contact: alexander.edler@alexreviewit.at

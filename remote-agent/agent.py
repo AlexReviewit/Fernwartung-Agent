@@ -427,6 +427,10 @@ class UI:
         self.code_lbl = None
         self.status_lbl = None
         self.status_dot = None
+        self.tray = None          # Symbol im Infobereich (nur Vollversion)
+        self.cur_mode = "ask"     # aktuelle Zugriffsregel (für das Tray-Menü)
+        self._pw_plain = ""
+        self._pw_style = "random"
 
     # ---- Hauptfenster (Schnellhilfe) ----
     def show_main(self, on_close):
@@ -484,6 +488,8 @@ class UI:
                 self.status_lbl.configure(text=text, fg=color); self.status_dot.configure(fg=dot)
             except Exception:
                 pass
+        if self.tray:
+            self.tray.set_status(text, dot)
 
     # ---- Zustimmungsdialog ----
     def ask_consent(self, who, timeout_s, result):
@@ -538,6 +544,8 @@ class UI:
         b.update_idletasks()
         b.geometry("+%d+%d" % ((b.winfo_screenwidth() - b.winfo_width()) // 2, 8))
         self._pulse(b, 0)
+        if self.tray:
+            self.tray.set_session(who)
 
     def _pulse(self, b, step):
         if not b.winfo_exists():
@@ -555,6 +563,8 @@ class UI:
             except Exception:
                 pass
             self.banner = None
+        if self.tray:
+            self.tray.set_session(None)
 
     # ---- Chat-Fenster (waehrend der Sitzung) ----
     def show_chat(self, on_send):
@@ -609,8 +619,9 @@ class UI:
         self._pw_style = "random"
         w = self.main = tk.Toplevel(self.root); w.title(APP_NAME + " – Vollversion"); w.configure(bg=BG); w.resizable(False, False)
         _set_icon(w)
-        # Fenster schließen = in den Hintergrund (läuft weiter), nicht beenden
-        w.protocol("WM_DELETE_WINDOW", w.iconify)
+        # Fenster schließen = läuft im Hintergrund weiter (Symbol im Infobereich),
+        # das Taskleisten-/Dock-Symbol verschwindet. Beenden nur über „Beenden“.
+        w.protocol("WM_DELETE_WINDOW", self.hide_to_tray)
         pad = tk.Frame(w, bg=BG); pad.pack(fill="both", expand=True)
         gradient_header(pad, W, "  " + BRAND, "Fernwartung · Vollversion").pack()
         # Geräte-Karte (abgerundet) mit großer ID und Kopier-Knopf
@@ -673,7 +684,7 @@ class UI:
         act = tk.Frame(pad, bg=BG); act.pack(padx=34, pady=(14, 6), fill="x")
         tk.Button(act, text="Intranet öffnen", command=cb["open"], bg=ACC, fg="#0C0A26", activebackground="#a99bff",
                   relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="left")
-        tk.Button(act, text="Im Hintergrund", command=w.iconify, bg=PANEL, fg=FG, activebackground="#2A3150",
+        tk.Button(act, text="Im Hintergrund", command=self.hide_to_tray, bg=PANEL, fg=FG, activebackground="#2A3150",
                   relief="flat", padx=12, pady=7, font=ui_font(10, "bold"), cursor="hand2", bd=0).pack(side="left", padx=8)
         if cb.get("checkupdate"):
             tk.Button(act, text="Nach Updates suchen", command=cb["checkupdate"], bg=PANEL, fg=MUT, activebackground="#2A3150",
@@ -731,20 +742,78 @@ class UI:
         """Zeigt das aktuelle (zufällige) Passwort groß an; bei festem Passwort Punkte."""
         try:
             self._pw_plain = text if self._pw_style == "random" else ""
+            if self.tray:
+                self.tray.refresh()
             self._pw_display.configure(text=(text if (self._pw_style == "random" and text) else ("●●●●●●" if self._pw_style == "fixed" else "—")))
         except Exception:
             pass
 
-    def _copy_ident(self):
+    def _copy_ident(self, quiet=False):
         try:
             self.root.clipboard_clear(); self.root.clipboard_append(getattr(self, "host_ident", ""))
-            self.info(APP_NAME, "Geräte-ID kopiert.")
+            if quiet:
+                self.notify("Geräte-ID %s kopiert." % self.pretty_ident())
+            else:
+                self.info(APP_NAME, "Geräte-ID kopiert.")
+        except Exception:
+            pass
+
+    def pretty_ident(self):
+        d = str(getattr(self, "host_ident", "") or "")
+        return (d[0:3] + " " + d[3:6] + " " + d[6:9]) if (len(d) == 9 and d.isdigit()) else (d or "–")
+
+    # ---- Im Hintergrund weiterlaufen (Infobereich) ----
+    def hide_to_tray(self, first_start=False):
+        """Fenster ausblenden – das Programm läuft weiter. Mit Symbol im Infobereich
+        verschwindet auch das Taskleisten-/Dock-Symbol; ohne (Fallback) wird minimiert."""
+        if not self.main:
+            return
+        if not (self.tray and self.tray.ok):
+            try:
+                self.main.iconify()
+            except Exception:
+                pass
+            return
+        try:
+            self.main.withdraw()
+        except Exception:
+            pass
+        _mac_dock(False)
+        if not first_start and not load_config().get("trayHint"):
+            update_config(trayHint=True)
+            msg = ("Die Fernwartung läuft im Hintergrund weiter und bleibt erreichbar.\n"
+                   "Wieder öffnen: über das Symbol %s – oder das Programm einfach nochmal starten.\n"
+                   "Ganz beenden: Symbol → „Beenden“."
+                   % ("oben in der Menüleiste" if IS_MAC else "unten rechts im Infobereich (neben der Uhr)"))
+            if not self.tray.notify(msg):
+                self.info(APP_NAME, msg)
+
+    def show_window(self):
+        if not self.main:
+            return
+        _mac_dock(True)
+        try:
+            self.main.deiconify(); self.main.lift()
+            self.main.attributes("-topmost", True)
+            self.main.after(250, lambda: self.main.attributes("-topmost", False))
+            self.main.focus_force()
+        except Exception:
+            pass
+
+    def notify(self, text):
+        """Kurze Benachrichtigung über das Tray-Symbol (falls vorhanden)."""
+        try:
+            if self.tray and self.tray.ok:
+                self.tray.notify(text)
         except Exception:
             pass
 
     def set_host_mode(self, mode, has_pw):
         """Hebt die aktive Zugriffsregel hervor und zeigt den passenden Hinweis."""
         try:
+            self.cur_mode = mode
+            if self.tray:
+                self.tray.refresh()
             for key, b in getattr(self, "_mode_btns", {}).items():
                 on = key == mode
                 b.configure(bg=(ACC if on else PANEL), fg=("#0C0A26" if on else MUT))
@@ -830,6 +899,208 @@ class UI:
 
     def run_soon(self, fn):
         self.root.after(0, fn)
+
+
+# ---------------------------------------------------------------------------
+# Infobereich / Menüleiste (Tray-Symbol) – nur Vollversion
+# ---------------------------------------------------------------------------
+def _mac_dock(visible):
+    """macOS: Dock-Symbol ein-/ausblenden (Fenster zu = kein Dock-Symbol mehr)."""
+    if not IS_MAC:
+        return
+    try:
+        from AppKit import NSApplication
+        app = NSApplication.sharedApplication()
+        app.setActivationPolicy_(0 if visible else 1)   # 0 = normal, 1 = nur Menüleiste
+        if visible:
+            app.activateIgnoringOtherApps_(True)
+    except Exception:
+        pass
+
+
+class Tray:
+    """Symbol im Infobereich (Windows) bzw. in der Menüleiste (macOS) mit
+    Schnellaktionen. Die Farbe des Punkts zeigt den Zustand:
+    grün = bereit, orange = verbindet/offline, rot = Sitzung läuft."""
+
+    COLORS = {"ok": (91, 214, 160, 255), "wait": (245, 177, 76, 255), "busy": (224, 72, 95, 255)}
+
+    def __init__(self, ui, actions):
+        self.ui = ui
+        self.a = actions          # dict: show, copyid, disconnect, mode(k), copypw, newpw, open, update, quit
+        self.icon = None
+        self.ok = False
+        self.state = "wait"
+        self.status = "Verbinde mit dem Intranet …"
+        self.who = None
+        self._base = None
+        self._imgs = {}
+
+    # Aktionen kommen bei Windows aus dem Tray-Thread → immer in den Tk-Thread geben
+    def _do(self, name, *args):
+        fn = self.a.get(name)
+        if fn:
+            self.ui.run_soon(lambda: fn(*args))
+
+    def _act(self, name, *args):
+        def cb(icon, item):
+            self._do(name, *args)
+        return cb
+
+    def _mode_checked(self, key):
+        def chk(item):
+            return self.ui.cur_mode == key
+        return chk
+
+    def _image(self, state):
+        if state in self._imgs:
+            return self._imgs[state]
+        from PIL import Image, ImageDraw
+        if self._base is None:
+            self._base = Image.open(resource_path(os.path.join("assets", "icon-64.png"))).convert("RGBA").resize((64, 64))
+        img = self._base.copy()
+        d = ImageDraw.Draw(img)
+        r = 12; x0 = 64 - 2 * r - 2; y0 = 64 - 2 * r - 2
+        d.ellipse((x0 - 3, y0 - 3, x0 + 2 * r + 3, y0 + 2 * r + 3), fill=(17, 20, 31, 255))
+        d.ellipse((x0, y0, x0 + 2 * r, y0 + 2 * r), fill=self.COLORS.get(state, self.COLORS["wait"]))
+        self._imgs[state] = img
+        return img
+
+    def _title(self):
+        t = APP_NAME + " – " + (("Sitzung mit %s" % self.who) if self.who else self.status)
+        return t[:120]   # Windows erlaubt nur kurze Tooltips
+
+    def start(self):
+        try:
+            import pystray
+        except Exception:
+            return False
+        M = pystray.MenuItem
+        SEP = pystray.Menu.SEPARATOR
+        ui = self.ui
+        modes = pystray.Menu(*[M(label, self._act("mode", key), checked=self._mode_checked(key), radio=True)
+                               for key, label, _h in UI.MODES])
+        menu = pystray.Menu(
+            M("Fenster öffnen", self._act("show"), default=True),
+            M(lambda item: "Geräte-ID %s kopieren" % ui.pretty_ident(), self._act("copyid")),
+            SEP,
+            M(lambda item: "Sitzung trennen (%s)" % (self.who or ""), self._act("disconnect"),
+              visible=lambda item: bool(self.who)),
+            M("Wer darf zugreifen?", modes),
+            M(lambda item: "Passwort kopieren (%s)" % (ui._pw_plain or ""), self._act("copypw"),
+              visible=lambda item: ui.cur_mode == "password" and ui._pw_style == "random" and bool(ui._pw_plain)),
+            M("Neues Passwort erzeugen", self._act("newpw"),
+              visible=lambda item: ui.cur_mode == "password" and ui._pw_style == "random"),
+            SEP,
+            M("Intranet öffnen", self._act("open")),
+            M("Nach Updates suchen", self._act("update")),
+            SEP,
+            M("Beenden", self._act("quit")),
+        )
+        try:
+            self.icon = pystray.Icon("AlexReviewitFernwartung", self._image(self.state), self._title(), menu)
+            if IS_MAC:
+                # macOS: Tk besitzt die Hauptschleife – das Symbol hängt sich dort an
+                self.icon.run_detached()
+            else:
+                threading.Thread(target=self.icon.run, daemon=True).start()
+            self.ok = True
+        except Exception:
+            self.icon = None
+            self.ok = False
+        return self.ok
+
+    def refresh(self):
+        if not self.icon:
+            return
+        try:
+            self.icon.icon = self._image("busy" if self.who else self.state)
+            self.icon.title = self._title()
+            self.icon.update_menu()
+        except Exception:
+            pass
+
+    def set_status(self, text, dot):
+        self.status = text
+        self.state = "ok" if dot in (OK, "#34D399") else ("busy" if dot == RED else "wait")
+        self.refresh()
+
+    def set_session(self, who):
+        self.who = who
+        self.refresh()
+
+    def notify(self, text):
+        """True, wenn eine System-Benachrichtigung gezeigt werden konnte."""
+        try:
+            if self.icon and getattr(self.icon, "HAS_NOTIFICATION", False):
+                self.icon.notify(text, APP_NAME)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def stop(self):
+        try:
+            if self.icon:
+                self.icon.stop()
+        except Exception:
+            pass
+        self.icon = None
+        self.ok = False
+
+
+# ---------------------------------------------------------------------------
+# Nur eine Vollversion gleichzeitig: ein zweiter Start holt das laufende
+# Fenster nach vorne (wichtig, weil Schließen das Programm nicht mehr beendet).
+# ---------------------------------------------------------------------------
+_SINGLE_PORT = int(os.environ.get("IR_SINGLE_PORT", "47613"))
+_SINGLE_HELLO = b"ARFW1"
+
+
+def single_instance(on_show):
+    """True = wir sind die erste Instanz. False = es läuft schon eine (die wurde geweckt)."""
+    try:
+        c = socket.create_connection(("127.0.0.1", _SINGLE_PORT), timeout=0.8)
+        try:
+            c.settimeout(0.8)
+            c.sendall(b"show\n")
+            if c.recv(16).startswith(_SINGLE_HELLO):
+                return False
+        finally:
+            c.close()
+    except Exception:
+        pass
+    try:
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if IS_WIN and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        srv.bind(("127.0.0.1", _SINGLE_PORT))
+        srv.listen(4)
+    except Exception:
+        return True   # Port anderweitig belegt – dann eben ohne Einzelinstanz-Schutz
+
+    def loop():
+        while True:
+            try:
+                conn, _ = srv.accept()
+            except Exception:
+                time.sleep(0.5); continue
+            try:
+                conn.settimeout(1.0)
+                data = conn.recv(16)
+                conn.sendall(_SINGLE_HELLO)
+                if data.startswith(b"show"):
+                    on_show()
+            except Exception:
+                pass
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    threading.Thread(target=loop, daemon=True).start()
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -937,7 +1208,13 @@ class Agent:
                 self.ui.run_soon(lambda: self.ui.set_status("Bereit – warte auf Verbindung …", MUT, "#34D399"))
                 sess = res.get("session")
                 if sess and sess.get("sid") and sess["sid"] != self.active_sid:
-                    await self.handle_session(sig, sess, res.get("unattended", "ask"))
+                    # WICHTIG: Liegt eine Sitzung an, schickt der Server die Zugriffsregel
+                    # IN der Sitzung mit (session.unattended). Früher wurde nur oben
+                    # nachgesehen – dort fehlt sie dann, und es wurde immer auf „Fragen“
+                    # zurückgefallen: „Automatisch“ fragte trotzdem nach und lehnte
+                    # ohne jemanden am Gerät nach 30 s ab.
+                    rule = sess.get("unattended") or res.get("unattended") or "ask"
+                    await self.handle_session(sig, sess, rule)
             except Exception:
                 self.ui.run_soon(lambda: self.ui.set_status("Verbinde mit dem Intranet …", "#F5B14C", "#F5B14C"))
             await asyncio.sleep(POLL_SECS)
@@ -957,6 +1234,12 @@ class Agent:
             # hat der Server das Zugriffs-Passwort bereits geprüft, bevor die Sitzung
             # überhaupt entstanden ist – hier wird daher nicht erneut nachgefragt.
             allow = True
+            # trotzdem sichtbar machen, dass sich jemand verbindet (Banner folgt gleich)
+            if hasattr(self.ui, "notify"):
+                self.ui.run_soon(lambda: self.ui.notify("%s verbindet sich – ohne Nachfrage erlaubt (Regel „%s“)."
+                                                        % (who, "Passwort" if unattended == "password" else "Automatisch")))
+        elif unattended == "off":
+            allow = False
         if not allow:
             await sig.call(dict({"action": "decline", "sid": sid, "reason": "am Gerät abgelehnt"}, **self.ident))
             self.ui.run_soon(lambda: self.ui.set_status("Anfrage abgelehnt.", MUT, "#8A93A6"))
@@ -1138,6 +1421,11 @@ class Agent:
 
     def request_quit(self):
         self.stop = True
+        try:
+            if getattr(self.ui, "tray", None):
+                self.ui.tray.stop()
+        except Exception:
+            pass
         if self._disconnect_evt and self.loop:
             self.loop.call_soon_threadsafe(self._disconnect_evt.set)
         try:
@@ -1216,6 +1504,7 @@ def main():
     ap.add_argument("--code", help="Einrichtungs-Code (bei --enroll)")
     ap.add_argument("--pw", help="Zugriffs-Passwort (optional, bei --enroll)")
     ap.add_argument("--name", help="Anzeigename des Geräts")
+    ap.add_argument("--tray", action="store_true", help="Vollversion versteckt im Infobereich starten (Autostart)")
     args, _ = ap.parse_known_args()
 
     if args.enroll:
@@ -1224,6 +1513,14 @@ def main():
     edition = args.edition or ("full" if args.service else "quick")
     mode = "quick" if edition == "quick" else "service"
     ui = UI(mode)
+
+    # Vollversion läuft schon (z. B. im Infobereich)? Dann nur deren Fenster zeigen.
+    if mode == "service" and not single_instance(lambda: ui.run_soon(ui.show_window)):
+        try:
+            ui.root.destroy()
+        except Exception:
+            pass
+        return
 
     # Vollversion: erst einrichten, falls noch nicht geschehen
     if mode == "service" and not (load_config().get("device") and load_config().get("token")):
@@ -1336,6 +1633,21 @@ def main():
         ui.show_host(cfg.get("name") or device_label(), ident,
                      {"close": agent.request_quit, "open": open_intranet, "mode": change_mode,
                       "pwstyle": on_pwstyle, "pwaction": on_pwaction, "checkupdate": check_update_now})
+
+        # Symbol im Infobereich / in der Menüleiste mit Schnellaktionen
+        def copy_pw_tray():
+            ui._copy_pw()
+            if ui._pw_plain:
+                ui.notify("Passwort kopiert.")
+
+        tray = Tray(ui, {"show": ui.show_window, "copyid": lambda: ui._copy_ident(quiet=True),
+                         "disconnect": agent.request_disconnect, "mode": change_mode,
+                         "copypw": copy_pw_tray, "newpw": apply_random, "open": open_intranet,
+                         "update": check_update_now, "quit": agent.request_quit})
+        if tray.start():
+            ui.tray = tray
+            if args.tray:
+                ui.hide_to_tray(first_start=True)
 
         def load_status():
             try:

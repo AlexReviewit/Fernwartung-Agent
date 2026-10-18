@@ -1,4 +1,4 @@
-; Inno-Setup-Skript – baut aus der Vollversion ein echtes Installationsprogramm
+﻿; Inno-Setup-Skript – baut aus der Vollversion ein echtes Installationsprogramm
 ; (wie bei Firefox): installiert nach "Programme", legt einen Startmenü-Eintrag an
 ; und startet die Fernwartung auf Wunsch automatisch beim Anmelden.
 ; Die Versionsnummer kommt aus der CI:  ISCC Fernwartung.iss /DMyVersion=12
@@ -25,6 +25,11 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 SetupIconFile=assets\icon.ico
+; Lizenz (Alle Rechte vorbehalten) wird im Installer zum Bestätigen angezeigt
+LicenseFile=LIZENZ.txt
+AppCopyright=© 2026 Alex Reviewit · Alle Rechte vorbehalten
+; laufendes Programm (auch im Infobereich) vor dem Update schließen
+CloseApplications=force
 
 [Languages]
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
@@ -34,7 +39,10 @@ Name: "desktopicon"; Description: "Desktop-Verknüpfung erstellen"; GroupDescrip
 Name: "autostart"; Description: "Beim Anmelden automatisch starten (empfohlen – damit das Gerät dauerhaft erreichbar ist)"; GroupDescription: "Start:"
 
 [Files]
-Source: "dist\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
+; Ordner-Build (statt einer einzelnen, selbst entpackenden .exe) – löst deutlich
+; seltener Fehlalarme bei Microsoft Defender aus und startet schneller.
+Source: "dist\AlexReviewit-Fernwartung\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "LIZENZ.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Alex Reviewit Fernwartung"; Filename: "{app}\{#AppExe}"
@@ -43,8 +51,12 @@ Name: "{autodesktop}\Alex Reviewit Fernwartung"; Filename: "{app}\{#AppExe}"; Ta
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; \
-  ValueName: "AlexReviewitFernwartung"; ValueData: """{app}\{#AppExe}"""; \
+  ValueName: "AlexReviewitFernwartung"; ValueData: """{app}\{#AppExe}"" --tray"; \
   Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Fernwartung jetzt einrichten und starten"; Flags: nowait postinstall skipifsilent
+
+[InstallDelete]
+; alte Einzeldatei-Version aufräumen, bevor der Ordner-Build installiert wird
+Type: filesandordirs; Name: "{app}\_internal"

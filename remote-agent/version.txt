@@ -6,7 +6,7 @@ VSVersionInfo(
       StringStruct('FileDescription', 'Alex Reviewit Fernwartung'),
       StringStruct('FileVersion', '1.0.0.0'),
       StringStruct('InternalName', 'AlexReviewitFernwartung'),
-      StringStruct('LegalCopyright', 'Alex Reviewit'),
+      StringStruct('LegalCopyright', '© 2026 Alex Reviewit · Alle Rechte vorbehalten'),
       StringStruct('OriginalFilename', 'AlexReviewit-Schnellhilfe.exe'),
       StringStruct('ProductName', 'Alex Reviewit Fernwartung'),
       StringStruct('ProductVersion', '1.0.0.0')])]),

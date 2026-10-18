@@ -26,6 +26,17 @@ VOLLVERSION EINRICHTEN (einmalig)
   Das Fenster zeigt ausserdem die grosse GERAETE-ID (zum Kopieren), den Live-Status
   und den letzten Zugriff. "Im Hintergrund" laesst es weiterlaufen.
 
+INFOBEREICH / MENUELEISTE (Vollversion)
+  • Fenster schliessen BEENDET NICHT: das Geraet bleibt erreichbar, das Symbol in
+    der Taskleiste/im Dock verschwindet. Neben der Uhr (Windows) bzw. oben in der
+    Menueleiste (macOS) bleibt ein kleines Symbol:
+      gruen = bereit · orange = verbindet/offline · rot = Sitzung laeuft
+  • Rechtsklick (Windows) / Klick (macOS) -> Schnellaktionen: Fenster oeffnen,
+    Geraete-ID kopieren, Zugriffsregel waehlen, Einmal-Passwort kopieren/neu,
+    Sitzung trennen, Intranet oeffnen, Updates, BEENDEN.
+  • Programm nochmal starten = das laufende Fenster kommt nach vorne.
+  • Der Windows-Autostart startet unsichtbar im Infobereich (--tray).
+
 VERBINDEN (im Intranet, Seite "Fernwartung")
   • Schnellhilfe: 6-stelligen Code eintippen -> "Verbinden".
   • Vollversion:  GERAETE-ID (+ Passwort, falls eingestellt) eintippen -> "Verbinden",
@@ -38,6 +49,8 @@ WAEHREND EINER SITZUNG (im Browser)
   • Zwischenablage (Text) zum Geraet senden
   • Dateien an das Geraet senden (Ziehen & Ablegen) -> Ordner "AlexReviewit-Empfangen"
   • Chat mit Zeitstempel und Absender
+  • MEHRERE GERAETE GLEICHZEITIG: jede Verbindung bekommt oben einen Reiter;
+    "+ Weiteres Geraet" fuehrt zurueck zur Liste, die Sitzungen laufen weiter.
 
 AUTOMATISCHES UPDATE
   Die Vollversion prueft von selbst, ob eine neuere Version da ist. Wenn ja,
@@ -66,3 +79,14 @@ macOS
 
 Adresse des Intranets ist fest hinterlegt (intranet.alexreviewit.at); fuer Tests
 ueber die Umgebungsvariable IR_REMOTE_URL aenderbar.
+
+MICROSOFT DEFENDER
+  Fernwartungs-Programme ohne Code-Signatur stuft Defender gern als verdaechtig ein.
+  Die Vollversion wird deshalb als Programmordner installiert (weniger Fehlalarme).
+  Falls trotzdem gemeldet: Datei auf https://www.microsoft.com/wdsi/filesubmission
+  als "Software developer" -> "Incorrectly detected as malware" einreichen.
+  Dauerhafte Loesung: Code-Signing-Zertifikat.
+
+LIZENZ
+  © 2026 Alex Reviewit – alle Rechte vorbehalten (proprietaer, kein Open Source).
+  Siehe LIZENZ.txt bzw. LICENSE im Projekt.

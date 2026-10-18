@@ -11,7 +11,7 @@ COMMON="--noconfirm --clean --windowed --icon assets/icon.icns --add-data assets
 echo "[2/4] Schnellhilfe bauen ..."
 python3 -m PyInstaller $COMMON --name "AlexReviewit-Schnellhilfe" --osx-bundle-identifier at.alexreviewit.fernwartung.quick schnellhilfe.py || { echo "[!] Fehler"; read -n1 -s -r; exit 1; }
 echo "[3/4] Vollversion bauen ..."
-python3 -m PyInstaller $COMMON --name "AlexReviewit-Fernwartung" --osx-bundle-identifier at.alexreviewit.fernwartung vollversion.py || { echo "[!] Fehler"; read -n1 -s -r; exit 1; }
+python3 -m PyInstaller $COMMON --name "AlexReviewit-Fernwartung" --hidden-import pystray._darwin --hidden-import AppKit --osx-bundle-identifier at.alexreviewit.fernwartung vollversion.py || { echo "[!] Fehler"; read -n1 -s -r; exit 1; }
 echo "[4/4] .pkg bauen ..."
 mkdir -p fertig
 for N in "AlexReviewit-Schnellhilfe" "AlexReviewit-Fernwartung"; do

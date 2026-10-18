@@ -18,17 +18,17 @@ where py >nul 2>nul && (set PY=py) || (set PY=python)
 echo [1/3] Bausteine installieren ...
 %PY% -m pip install --upgrade pip --disable-pip-version-check -q
 %PY% -m pip install --disable-pip-version-check -q -r requirements.txt pyinstaller
-set COMMON=--noconfirm --clean --onefile --noconsole --version-file version.txt --add-data "assets;assets" --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-submodules pynput
+set COMMON=--noconfirm --clean --noconsole --version-file version.txt --add-data "assets;assets" --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-submodules pynput
 echo [2/3] Schnellhilfe bauen ...
-%PY% -m PyInstaller %COMMON% --name "AlexReviewit-Schnellhilfe" --icon "assets\icon.ico" schnellhilfe.py || (echo [!] Fehler & pause & exit /b 1)
+%PY% -m PyInstaller %COMMON% --onefile --name "AlexReviewit-Schnellhilfe" --icon "assets\icon.ico" schnellhilfe.py || (echo [!] Fehler & pause & exit /b 1)
 echo [2/3] Vollversion bauen ...
-%PY% -m PyInstaller %COMMON% --name "AlexReviewit-Fernwartung" --icon "assets\icon.ico" vollversion.py || (echo [!] Fehler & pause & exit /b 1)
+%PY% -m PyInstaller %COMMON% --onedir --add-data "LIZENZ.txt;." --hidden-import pystray._win32 --name "AlexReviewit-Fernwartung" --icon "assets\icon.ico" vollversion.py || (echo [!] Fehler & pause & exit /b 1)
 echo [3/3] Fertigstellen ...
 if not exist fertig mkdir fertig
 copy /Y "dist\AlexReviewit-Schnellhilfe.exe" "fertig\" >nul
-copy /Y "dist\AlexReviewit-Fernwartung.exe" "fertig\" >nul
+xcopy /E /I /Y "dist\AlexReviewit-Fernwartung" "fertig\AlexReviewit-Fernwartung" >nul
 echo.
 echo [ok] Im Ordner 'fertig':
 echo      AlexReviewit-Schnellhilfe.exe   -> an Kunden/Mitarbeiter weitergeben (zeigt Code)
-echo      AlexReviewit-Fernwartung.exe    -> auf eigenen Geraeten installieren (Vollversion)
+echo      AlexReviewit-Fernwartung\     -> Vollversion (Ordner; Installer baut die CI mit Inno Setup)
 pause

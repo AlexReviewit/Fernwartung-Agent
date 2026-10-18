@@ -42,6 +42,7 @@ Das eigene Fernwartungs‑Tool für das Intranet von Alex Reviewit.
 - ✅ Zugriff nur nach **Zustimmung** oder nach deiner eingestellten Regel
 - 🆔 **Geräte‑ID + Passwort** wie bei TeamViewer · feste oder Einmal‑Passwörter
 - 🔄 **Automatisches Update** mit einem Klick
+- 🟢 **Symbol im Infobereich** mit Schnellaktionen – Fenster zu, Programm läuft weiter
 - 📝 Jede Sitzung wird **protokolliert**
 
 <br>
@@ -65,6 +66,22 @@ und den **letzten Zugriff**.
 </details>
 
 <details>
+<summary><b>🟢 Infobereich / Menüleiste</b></summary>
+
+<br>
+
+Die Vollversion legt ein Symbol neben die Uhr (Windows) bzw. in die Menüleiste (macOS).
+Der Punkt zeigt den Zustand: 🟢 bereit · 🟠 verbindet · 🔴 Sitzung läuft.
+
+- **Fenster schließen** beendet nicht – das Gerät bleibt erreichbar, das
+  Taskleisten‑/Dock‑Symbol verschwindet. Nochmal starten holt das Fenster zurück.
+- **Schnellaktionen:** Fenster öffnen · Geräte‑ID kopieren · Zugriffsregel wählen ·
+  Einmal‑Passwort kopieren/neu · Sitzung trennen · Intranet · Updates · Beenden.
+- Der Autostart (Windows) startet direkt unsichtbar im Infobereich (`--tray`).
+
+</details>
+
+<details>
 <summary><b>🎛️ Funktionen während einer Sitzung</b></summary>
 
 <br>
@@ -73,6 +90,7 @@ und den **letzten Zugriff**.
 - Mehrere Bildschirme umschalten
 - Dateien senden · Zwischenablage · Strg + Alt + Entf
 - Chat mit Zeitstempel und Absender
+- **Mehrere Geräte gleichzeitig** – jede Verbindung bekommt einen eigenen Reiter
 
 </details>
 
@@ -99,6 +117,12 @@ selbst herunter, startet ihn und schließt sich. Mit **„Nach Updates suchen“
   (mit Sperre nach mehreren Fehlversuchen).
 - Zugriff auf die Seite nur mit **Microsoft‑Anmeldung** + Berechtigung „Fernsteuerung“.
 - In diesem Projekt liegen **keine Passwörter oder Schlüssel** – die liegen sicher in Cloudflare.
+- **Microsoft Defender:** Fernwartungs‑Programme ohne Code‑Signatur werden gern als
+  „verdächtig“ eingestuft. Die Vollversion wird deshalb als Programmordner gebaut
+  (weniger Fehlalarme). Meldet Defender trotzdem etwas: die Datei unter
+  [Microsoft Security Intelligence](https://www.microsoft.com/wdsi/filesubmission)
+  als *Software developer* → *Incorrectly detected as malware* einreichen. Dauerhaft
+  hilft nur ein Code‑Signing‑Zertifikat.
 
 </details>
 
@@ -126,4 +150,12 @@ Lokal bauen: `remote-agent/BUILD-Windows.cmd` bzw. `BUILD-Mac.command`
 
 <br>
 
-<div align="center"><sub>© Alex Reviewit · Fernwartung für intranet.alexreviewit.at</sub></div>
+## 📄 Lizenz
+
+Proprietär – **© 2026 Alex Reviewit, alle Rechte vorbehalten.** Der Quellcode ist
+einsehbar, aber nicht Open Source. Nutzung, Weitergabe oder Änderung nur mit
+schriftlicher Genehmigung. Details in [`LICENSE`](LICENSE).
+
+<br>
+
+<div align="center"><sub>© Alex Reviewit · Alle Rechte vorbehalten · Fernwartung für intranet.alexreviewit.at</sub></div>

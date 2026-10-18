@@ -6,6 +6,23 @@ sich geändert hat – neueste zuerst.
 
 ## Oktober 2026
 
+- **Fehler behoben – „Automatisch“ fragte trotzdem nach:** Bei einer eingehenden
+  Sitzung wurde die Zugriffsregel an der falschen Stelle gelesen und fiel immer
+  auf „Fragen“ zurück. Ohne jemanden am Gerät wurde dann nach 30 s abgelehnt.
+  Jetzt verbinden „Automatisch“ und „Passwort“ wirklich ohne Nachfrage; das rote
+  Banner und eine Benachrichtigung zeigen trotzdem an, wer verbunden ist.
+- **Symbol im Infobereich / in der Menüleiste** (Vollversion) mit Schnellaktionen:
+  Fenster öffnen, Geräte‑ID kopieren, Zugriffsregel umschalten, Einmal‑Passwort
+  kopieren/erneuern, laufende Sitzung trennen, Intranet, Updates, Beenden.
+  Ein farbiger Punkt zeigt den Zustand (grün bereit · orange verbindet · rot Sitzung).
+- **Fenster schließen = läuft weiter:** Das Programm bleibt erreichbar, das
+  Taskleisten‑ bzw. Dock‑Symbol verschwindet. Ein erneuter Start öffnet das
+  laufende Fenster statt einer zweiten Kopie. Der Autostart startet direkt
+  unsichtbar im Infobereich.
+- **Weniger Defender‑Fehlalarme:** Die Windows‑Vollversion wird jetzt als
+  Programmordner installiert statt als einzelne, sich selbst entpackende .exe.
+- **Eigene Lizenz:** „Alle Rechte vorbehalten“ (siehe `LICENSE`); der
+  Windows‑Installer zeigt sie zum Bestätigen an.
 - **Ein‑Klick‑Update:** „Jetzt aktualisieren“ lädt den passenden Installer selbst
   herunter (mit Fortschritt), startet ihn und beendet das Programm. Zusätzlich
   „Später“ und „Nach Updates suchen“.

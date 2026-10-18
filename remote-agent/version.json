@@ -1,4 +1,4 @@
 {
   "page": "https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest",
-  "notes": "Neues Design im Look des Intranets, automatisches Update in der Vollversion, Passwort-Schutz gegen Ausprobieren."
+  "notes": "Symbol im Infobereich mit Schnellaktionen, Fenster schließen = läuft weiter, „Automatisch“ verbindet jetzt wirklich ohne Nachfrage."
 }
