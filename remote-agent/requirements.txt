@@ -1,4 +1,8 @@
 aiortc>=1.9
+# cryptography ab 49 liefert für macOS nur noch arm64-Wheels -> auf Intel-Macs
+# müsste pip aus Quellcode bauen (Rust, hängt stundenlang). 48.x hat ein
+# universal2-Wheel (läuft auf Intel UND Apple-Chip). Darum hier begrenzt.
+cryptography>=44,<49
 av>=11
 mss>=9
 pynput>=1.7
