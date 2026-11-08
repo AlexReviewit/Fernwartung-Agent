@@ -157,7 +157,10 @@ def installer_name(mode):
     if IS_WIN:
         return "AlexReviewit-Fernwartung-Setup.exe" if full else "AlexReviewit-Schnellhilfe.exe"
     if IS_MAC:
-        return ("AlexReviewit-Fernwartung.pkg" if full else "AlexReviewit-Schnellhilfe.pkg")
+        # Passende Architektur wählen – reine arm64-Pakete laufen nicht auf Intel-Macs.
+        arch = "AppleSilicon" if platform.machine() == "arm64" else "Intel"
+        base = "AlexReviewit-Fernwartung" if full else "AlexReviewit-Schnellhilfe"
+        return base + "-" + arch + ".pkg"
     return None
 
 

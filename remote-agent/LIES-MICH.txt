@@ -8,7 +8,8 @@ ZWEI PROGRAMME
 
   • VOLLVERSION (Host): ein richtiges Installationsprogramm (wie Firefox).
       Windows:  AlexReviewit-Fernwartung-Setup.exe   (Installer)
-      macOS:    AlexReviewit-Fernwartung.pkg          (Installer)
+      macOS:    AlexReviewit-Fernwartung-AppleSilicon.pkg  (Apple M1-M4)
+                AlexReviewit-Fernwartung-Intel.pkg         (Intel-Mac)
     Nach der Installation landet das Programm unter "Programme", bekommt einen
     Startmenue-Eintrag und startet auf Wunsch automatisch mit.
 

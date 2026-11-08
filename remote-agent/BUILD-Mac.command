@@ -14,9 +14,11 @@ echo "[3/4] Vollversion bauen ..."
 python3 -m PyInstaller $COMMON --name "AlexReviewit-Fernwartung" --hidden-import pystray._darwin --hidden-import AppKit --osx-bundle-identifier at.alexreviewit.fernwartung vollversion.py || { echo "[!] Fehler"; read -n1 -s -r; exit 1; }
 echo "[4/4] .pkg bauen ..."
 mkdir -p fertig
+# Architektur in den Dateinamen (arm64 = Apple-Chip, sonst Intel) – passend zum Online-Build.
+case "$(uname -m)" in arm64) A="AppleSilicon" ;; *) A="Intel" ;; esac
 for N in "AlexReviewit-Schnellhilfe" "AlexReviewit-Fernwartung"; do
   [ -n "$CODESIGN_ID" ] && codesign --deep --force --options runtime --sign "$CODESIGN_ID" "dist/$N.app"
-  pkgbuild --install-location /Applications --component "dist/$N.app" "fertig/$N.pkg" && echo "   fertig/$N.pkg"
+  pkgbuild --install-location /Applications --component "dist/$N.app" "fertig/$N-$A.pkg" && echo "   fertig/$N-$A.pkg"
   cp -R "dist/$N.app" fertig/ 2>/dev/null
 done
 echo

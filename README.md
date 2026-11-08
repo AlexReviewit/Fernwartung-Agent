@@ -18,11 +18,13 @@ Das eigene Fernwartungs‑Tool für das Intranet von Alex Reviewit.
 ## ⬇️ Download
 
 > 💡 Am einfachsten direkt im Intranet unter **Fernwartung** – dort stehen die passenden Knöpfe.
+>
+> 🍎 **Welche Mac-Datei?** Apple-Menü () → „Über diesen Mac“: **Apple M1–M4** → Apple-Chip, **Intel** → Intel. Eine Apple-Chip-Datei läuft nicht auf Intel-Macs (meldet „nicht kompatibel“).
 
-|  | Windows | macOS |
-|:--|:--:|:--:|
-| ⚡ **Schnellhilfe** – spontane Hilfe, keine Installation | **[.exe](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.exe)** | **[.pkg](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.pkg)** |
-| 💻 **Vollversion** – eigene Geräte dauerhaft | **[Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe)** | **[Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung.pkg)** |
+|  | Windows | macOS · Apple-Chip | macOS · Intel |
+|:--|:--:|:--:|:--:|
+| ⚡ **Schnellhilfe** – spontane Hilfe, keine Installation | **[.exe](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.exe)** | **[.pkg](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe-AppleSilicon.pkg)** | **[.pkg](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe-Intel.pkg)** |
+| 💻 **Vollversion** – eigene Geräte dauerhaft | **[Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe)** | **[Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung-AppleSilicon.pkg)** | **[Installer](https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung-Intel.pkg)** |
 
 <br>
 

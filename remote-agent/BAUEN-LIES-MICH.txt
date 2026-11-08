@@ -12,8 +12,8 @@ EMPFOHLEN: AUTOMATISCH IN DER GITHUB-CLOUD
   Dateien pro Release:
     • AlexReviewit-Schnellhilfe.exe        (Windows, QuickSupport, keine Installation)
     • AlexReviewit-Fernwartung-Setup.exe   (Windows, Vollversion – Installer)
-    • AlexReviewit-Schnellhilfe.pkg        (macOS, QuickSupport)
-    • AlexReviewit-Fernwartung.pkg         (macOS, Vollversion – Installer)
+    • AlexReviewit-Schnellhilfe-AppleSilicon.pkg / -Intel.pkg  (macOS, QuickSupport)
+    • AlexReviewit-Fernwartung-AppleSilicon.pkg / -Intel.pkg   (macOS, Vollversion)
     • version.json                         (steuert das automatische Update)
 
   Die Versionsnummer wird beim Bauen in build.txt geschrieben und ins Programm

@@ -5,8 +5,10 @@
 # aktuellsten Build, damit die festen Download-Links gleich bleiben:
 #   https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.exe
 #   https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe
-#   https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Schnellhilfe.pkg
-#   https://github.com/AlexReviewit/Fernwartung-Agent/releases/latest/download/AlexReviewit-Fernwartung.pkg
+#   macOS gibt es je Architektur (Intel bzw. Apple-Chip), weil eine reine
+#   arm64-App auf Intel-Macs "nicht kompatibel" meldet:
+#   .../AlexReviewit-Schnellhilfe-AppleSilicon.pkg  .../AlexReviewit-Schnellhilfe-Intel.pkg
+#   .../AlexReviewit-Fernwartung-AppleSilicon.pkg   .../AlexReviewit-Fernwartung-Intel.pkg
 name: Build Fernwartung
 on:
   workflow_dispatch:
@@ -94,7 +96,18 @@ jobs:
             remote-agent/dist/AlexReviewit-Fernwartung-Setup.exe
   macos:
     needs: prep
-    runs-on: macos-latest
+    # Zwei Durchläufe: Intel-Mac (macos-13, x86_64) und Apple-Chip (macos-15, arm64).
+    # Eine reine arm64-App meldet auf Intel-Macs "nicht kompatibel" – daher beide.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-13, arch: Intel }
+          - { runner: macos-15, arch: AppleSilicon }
+    runs-on: ${{ matrix.runner }}
+    # Auch ältere macOS-Versionen zulassen (nicht nur die des Build-Runners).
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
     defaults: { run: { working-directory: remote-agent } }
     steps:
       - uses: actions/checkout@v4
@@ -106,11 +119,15 @@ jobs:
       - run: pip install -r requirements.txt pyinstaller
       - run: pyinstaller --noconfirm --clean --windowed --icon assets/icon.icns --add-data "assets:assets" --add-data "build.txt:." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-all cryptography --collect-all cffi --collect-all mss --collect-all numpy --collect-all pyee --collect-all google_crc32c --collect-submodules pynput --osx-bundle-identifier at.alexreviewit.fernwartung.quick --name "AlexReviewit-Schnellhilfe" schnellhilfe.py
       - run: pyinstaller --noconfirm --clean --windowed --icon assets/icon.icns --add-data "assets:assets" --add-data "build.txt:." --collect-all aiortc --collect-all av --collect-all aioice --collect-all pylibsrtp --collect-all cryptography --collect-all cffi --collect-all mss --collect-all numpy --collect-all pyee --collect-all google_crc32c --collect-submodules pynput --hidden-import pystray._darwin --hidden-import AppKit --osx-bundle-identifier at.alexreviewit.fernwartung --name "AlexReviewit-Fernwartung" vollversion.py
-      - run: |
-          pkgbuild --install-location /Applications --component "dist/AlexReviewit-Schnellhilfe.app" "dist/AlexReviewit-Schnellhilfe.pkg"
-          pkgbuild --install-location /Applications --component "dist/AlexReviewit-Fernwartung.app" "dist/AlexReviewit-Fernwartung.pkg"
+      - name: Pakete bauen (Architektur im Dateinamen)
+        run: |
+          A="${{ matrix.arch }}"
+          pkgbuild --install-location /Applications --component "dist/AlexReviewit-Schnellhilfe.app" "dist/AlexReviewit-Schnellhilfe-$A.pkg"
+          pkgbuild --install-location /Applications --component "dist/AlexReviewit-Fernwartung.app" "dist/AlexReviewit-Fernwartung-$A.pkg"
       - uses: actions/upload-artifact@v4
-        with: { name: macOS, path: 'remote-agent/dist/*.pkg' }
+        with:
+          name: macOS-${{ matrix.arch }}
+          path: 'remote-agent/dist/*-${{ matrix.arch }}.pkg'
   release:
     needs: [prep, windows, macos]
     runs-on: ubuntu-latest
@@ -172,10 +189,12 @@ jobs:
             echo "Die Download-Links hier bleiben gleich – praktisch fuer die Knoepfe im Intranet."
             echo ""
             echo "### ⬇️ Download"
-            echo "| | Windows | macOS |"
-            echo "|---|---|---|"
-            echo "| ⚡ Schnellhilfe | [.exe](https://github.com/$REPO/releases/latest/download/AlexReviewit-Schnellhilfe.exe) | [.pkg](https://github.com/$REPO/releases/latest/download/AlexReviewit-Schnellhilfe.pkg) |"
-            echo "| 💻 Vollversion | [Installer](https://github.com/$REPO/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe) | [Installer](https://github.com/$REPO/releases/latest/download/AlexReviewit-Fernwartung.pkg) |"
+            echo "| | Windows | macOS (Apple-Chip M1–M4) | macOS (Intel) |"
+            echo "|---|---|---|---|"
+            echo "| ⚡ Schnellhilfe | [.exe](https://github.com/$REPO/releases/latest/download/AlexReviewit-Schnellhilfe.exe) | [.pkg](https://github.com/$REPO/releases/latest/download/AlexReviewit-Schnellhilfe-AppleSilicon.pkg) | [.pkg](https://github.com/$REPO/releases/latest/download/AlexReviewit-Schnellhilfe-Intel.pkg) |"
+            echo "| 💻 Vollversion | [Installer](https://github.com/$REPO/releases/latest/download/AlexReviewit-Fernwartung-Setup.exe) | [Installer](https://github.com/$REPO/releases/latest/download/AlexReviewit-Fernwartung-AppleSilicon.pkg) | [Installer](https://github.com/$REPO/releases/latest/download/AlexReviewit-Fernwartung-Intel.pkg) |"
+            echo ""
+            echo "> **Welche Mac-Datei?** Apple-Menü () → „Über diesen Mac“: steht dort **Apple M1/M2/M3/M4** → Apple-Chip, steht dort **Intel** → Intel."
             echo ""
             echo "### 🔄 Was ist neu in Version $NUM"
             echo "$CHANGES"
